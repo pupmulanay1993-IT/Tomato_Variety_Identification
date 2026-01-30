@@ -182,7 +182,7 @@ def run_prediction(pil_image):
     return result, res_colors
 
 # -------------------------------------------------
-# 3. STYLING & HEADER
+# 3. STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
 # -------------------------------------------------
 st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
 
@@ -193,6 +193,7 @@ logo_right_base64 = get_base64_of_bin_file("PUP Mulanay right.png")
 st.markdown(
     f"""
 <style>
+/* 1. BASE APP & BACKGROUND */
 .stApp {{
     background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
                       url("data:image/jpg;base64,{background_base64}");
@@ -201,102 +202,82 @@ st.markdown(
     color: white !important;
     font-weight: 600;
 }}
-.header-row {{
+
+/* 2. RESPONSIVE HEADER (LOGO - TEXT - LOGO) */
+.header-container {{
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    gap: 20px;
-    padding: 20px;
+    padding: 10px 0px;
+    margin-bottom: 20px;
 }}
+
 .header-text {{
-    font-size: 32px;
+    font-size: clamp(1.2rem, 5vw, 2rem); /* Dynamic para sa selpon */
     font-weight: bold;
     color: #FFD700 !important;
+    text-align: center;
+    flex-grow: 1;
+    line-height: 1.2;
 }}
-.stRadio {{
-    color: white !important;
+
+.logo-img {{
+    width: clamp(45px, 10vw, 65px); /* Responsive logos */
+    height: auto;
 }}
-.stRadio label {{
-    color: white !important;
-}}
-.stRadio div {{
-    color: white !important;
-}}
-.stRadio span {{
-    color: white !important;
-}}
-.stFileUploader {{
+
+/* 3. RADIO & UPLOADER VISIBILITY */
+.stRadio label, .stRadio div, .stRadio span {{ color: white !important; }}
+.stFileUploader {{ 
+    background-color: rgba(255,255,255,0.9); 
+    border-radius: 10px; 
+    padding: 10px; 
     color: #000000 !important;
 }}
-.stFileUploader label {{
-    color: #000000 !important;
-}}
-.stFileUploader div {{
-    color: #000000 !important;
-}}
-.stFileUploader span {{
-    color: #000000 !important;
-}}
-.stFileUploader p {{
-    color: #000000 !important;
-}}
-.uploadedFile {{
-    color: #000000 !important;
-}}
+.stFileUploader p, .stFileUploader span, .uploadedFile {{ color: #000000 !important; }}
+
+/* 4. ALERTS & MESSAGES (YOUR ORIGINAL COLORS) */
 .stSuccess {{
     color: white !important;
     background-color: rgba(0, 100, 0, 0.8) !important;
     padding: 15px !important;
     border-radius: 5px !important;
 }}
-.stSuccess p {{
-    color: #FF6600 !important;
-    font-size: 18px !important;
-    font-weight: bold !important;
-}}
-.stSuccess strong {{
-    color: #FF6600 !important;
-}}
+.stSuccess p, .stSuccess strong {{ color: #FF6600 !important; font-size: 18px !important; font-weight: bold !important; }}
+
 .stInfo {{
     color: white !important;
-    background-color: rgba(0, 50, 100, 0.100) !important;
+    background-color: rgba(0, 50, 100, 0.2) !important;
     padding: 15px !important;
     border-radius: 5px !important;
 }}
-.stInfo p {{
-    color: #FF6600 !important;
-    font-size: 16px !important;
-    font-weight: bold !important;
-}}
-.stInfo strong {{
-    color: #FF6600 !important;
-}}
+.stInfo p, .stInfo strong {{ color: #FF6600 !important; font-size: 16px !important; font-weight: bold !important; }}
+
 .stWarning {{
     color: white !important;
     background-color: rgba(100, 50, 0, 0.5) !important;
     padding: 15px !important;
     border-radius: 5px !important;
 }}
-.stWarning p {{
-    color: #FFFFFF !important;
-    font-size: 16px !important;
+.stWarning p, .stWarning strong {{ color: #FFFFFF !important; font-size: 16px !important; font-weight: bold !important; }}
+
+/* 5. BUTTONS & METRICS */
+div.stButton > button {{
+    font-size: 12px !important;
+    padding: 5px 10px !important;
+    border-radius: 8px !important;
+    text-transform: uppercase;
     font-weight: bold !important;
 }}
-.stWarning strong {{
-    color: #FFFFFF !important;
-}}
-[data-testid="stMetricValue"] {{
-    color: #FFFFFF !important;
-    font-weight: bold !important;
-}}
-h1, h2, h3, h4, h5, h6 {{
-    color: #FFFFFF !important;
-}}
+[data-testid="stMetricValue"] {{ color: #FFFFFF !important; font-weight: bold !important; }}
+h1, h2, h3, h4, h5, h6 {{ color: #FFFFFF !important; }}
+
 </style>
-<div class="header-row">
-    <img src="data:image/png;base64,{logo_left_base64}" width="60">
+
+<div class="header-container">
+    <img src="data:image/png;base64,{logo_left_base64}" class="logo-img">
     <div class="header-text">Tomato Variety Identification</div>
-    <img src="data:image/png;base64,{logo_right_base64}" width="60">
+    <img src="data:image/png;base64,{logo_right_base64}" class="logo-img">
 </div>
 """,
     unsafe_allow_html=True,
@@ -387,24 +368,50 @@ class VideoTransformer(VideoTransformerBase):
         return self.latest_frame
 
 # -------------------------------------------------
-# 5. UI LAYOUT & DISPLAY
+# 5. UI LAYOUT & DISPLAY (FULL MOBILE-OPTIMIZED)
 # -------------------------------------------------
-col_space, col_view, col_download = st.columns([6, 1, 1])
+col_view, col_download = st.columns(2)
 
 with col_view:
-    st.markdown('<style>.stButton button { background-color: #FF6600; color: white; font-weight: bold; padding: 8px 12px; border-radius: 6px; border: 1px solid #FFD700; font-size: 12px; }</style>', unsafe_allow_html=True)
+    # Orange "View All" Button
+    st.markdown("""
+        <style>
+        div[data-testid="column"]:nth-of-type(1) button {
+            background-color: #FF6600 !important;
+            color: white !important;
+            font-weight: bold !important;
+            border-radius: 8px !important;
+            border: 1px solid #FFD700 !important;
+            height: 38px !important;
+            font-size: 11px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     if st.button("👁️ VIEW ALL", use_container_width=True, key="btn_view"):
         st.session_state.show_predictions = True
 
 with col_download:
-    st.markdown('<style>.stButton button { background-color: #1E90FF; color: white; font-weight: bold; padding: 8px 12px; border-radius: 6px; border: 1px solid #FFD700; font-size: 12px; }</style>', unsafe_allow_html=True)
+    # Blue "Download" Button
+    st.markdown("""
+        <style>
+        div[data-testid="column"]:nth-of-type(2) button {
+            background-color: #1E90FF !important;
+            color: white !important;
+            font-weight: bold !important;
+            border-radius: 8px !important;
+            border: 1px solid #FFD700 !important;
+            height: 38px !important;
+            font-size: 11px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     if st.button("📥 DOWNLOAD", use_container_width=True, key="btn_download"):
         predictions = fetch_all_predictions()
         if predictions:
             excel_data = convert_predictions_to_excel(predictions)
             if excel_data:
                 st.download_button(
-                    label="Download Excel File",
+                    label="CONFIRM",
                     data=excel_data,
                     file_name="tomato_predictions.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -412,11 +419,12 @@ with col_download:
                     key="excel_download_trigger"
                 )
         else:
-            st.warning("No data to download yet.")
+            st.warning("No data yet.")
 
 st.divider()
 
-col1, col2, col3 = st.columns([1.2, 1, 1], gap="medium")
+# --- MAIN COLUMNS 
+col1, col2, col3 = st.columns([1, 1, 1], gap="small")
 res_variety, res_colors = None, None
 
 with col1:
