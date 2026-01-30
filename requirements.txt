@@ -1,0 +1,12 @@
+gdown
+streamlit
+tensorflow
+Pillow
+numpy
+supabase
+scikit-fuzzy
+opencv-python-headless
+streamlit-webrtc
+av
+pandas
+openpyxl
