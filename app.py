@@ -465,106 +465,103 @@ with col1:
 with col2:
     st.subheader("📊 Processing")
     if res_variety:
-        v_name = res_variety["variety_label"].replace("_"," ").title()
+        v_label = res_variety.get("variety_label", "Unknown")
+        v_name = v_label.replace("_"," ").title()
+        
+        # 1. Identification (Always shown)
         st.success(f"**Variety:** {v_name}")
         st.metric("AI Confidence", res_variety.get('prediction_display', f"{res_variety.get('prediction', 0):.1%}"))
         
         st.divider()
         
-        # Ripeness Gauge using Fuzzy Logic
-        f_score = res_variety.get("fuzzy_ripeness", 0)
-        if f_score < 40:
-            rip_status, rip_color = "Unripe (Hilaw)", "green"
-        elif f_score < 75:
-            rip_status, rip_color = "Ripe (Hinog)", "orange"
-        else:
-            rip_status, rip_color = "Overripe (Lanta)", "red"
+        # --- CONDITION: Show only if it's a real tomato ---
+        if v_label != "non_tomato":
+            # Ripeness Gauge
+            f_score = res_variety.get("fuzzy_ripeness", 0)
+            if f_score < 40:
+                rip_status, rip_color = "Unripe (Hilaw)", "green"
+            elif f_score < 75:
+                rip_status, rip_color = "Ripe (Hinog)", "orange"
+            else:
+                rip_status, rip_color = "Overripe (Lanta)", "red"
+                
+            st.markdown(f"**Ripeness Status:** :{rip_color}[{rip_status}]")
+            st.metric("Maturity Level", f"{f_score:.1f}%")
+            st.progress(f_score / 100)
             
-        st.markdown(f"**Ripeness Status:** :{rip_color}[{rip_status}]")
-        st.metric("Maturity Level", f"{f_score:.1f}%")
-        st.progress(f_score / 100)
-        
-        # Color Cluster UI
-        if res_colors:
-            st.subheader("Dominant Pigments")
-            color_cols = st.columns(len(res_colors))
-            for i, (lbl, val) in enumerate(res_colors.items()):
-                with color_cols[i]:
-                    st.markdown(f"""
-                    <div style="
-                        background-color: {val['color']};
-                        height: 40px;
-                        border-radius: 8px;
-                        border: 2px solid white;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        margin: 5px 0;
-                    ">
-                        <span style="color: white; font-weight: bold; font-size: 10px; text-shadow: 1px 1px 2px black;">
-                            {lbl.split()[0]}
-                        </span>
-                    </div>
-                    """, unsafe_allow_html=True)
+            # Color Clusters
+            if res_colors:
+                st.subheader("Dominant Pigments")
+                color_cols = st.columns(len(res_colors))
+                for i, (lbl, val) in enumerate(res_colors.items()):
+                    with color_cols[i]:
+                        st.markdown(f"""
+                        <div style="background-color: {val['color']}; height: 40px; border-radius: 8px; border: 2px solid white; display: flex; align-items: center; justify-content: center; margin: 5px 0;">
+                            <span style="color: white; font-weight: bold; font-size: 10px; text-shadow: 1px 1px 2px black;">
+                                {lbl.split()[0]}
+                            </span>
+                        </div>
+                        """, unsafe_allow_html=True)
             
             # Analysis Metrics Box
             st.markdown("---")
-            st.markdown("""
-            <div style="
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 15px;
-                border-radius: 10px;
-                border-left: 5px solid #FFD700;
-            ">
-                <h4 style="color: white; margin: 0; text-transform: uppercase;">📊 Analysis Metrics</h4>
-                <p style="color: #E0E0E0; margin: 5px 0; font-size: 12px;">
-                    <b>HSV Score:</b> """ + f"{res_variety.get('hsv_score', 0):.1f}%" + """
-                    | <b>Lab Score:</b> """ + f"{res_variety.get('lab_score', 0):.3f}" + """
+            hsv_val = res_variety.get('hsv_score', res_variety.get('hsv_percent', 0))
+            lab_val = res_variety.get('lab_score', 0)
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; border-left: 5px solid #FFD700;">
+                <h4 style="color: white; margin: 0; text-transform: uppercase; font-size: 14px;">📊 Analysis Metrics</h4>
+                <p style="color: #E0E0E0; margin: 5px 0; font-size: 11px;">
+                    <b>HSV Score:</b> {hsv_val:.1f}% | <b>Lab Score:</b> {lab_val:.3f}
                 </p>
             </div>
             """, unsafe_allow_html=True)
+        else:
+            st.warning("⚠️ **Object Recognition**")
+            st.info("Ripeness and color metrics are disabled for non-tomato targets.")
 
 with col3:
     st.subheader("💡 Recommendations")
     if res_variety:
-        f_score = res_variety.get("fuzzy_ripeness", 0)
+        v_label = res_variety.get("variety_label", "Unknown")
+        v_name = v_label.replace("_"," ").title()
         
-        # Insight based on Maturity
-        if f_score < 40:
-            st.warning("🟢 **Logistics:** High durability. Best for long-distance shipping.")
-        elif f_score < 75:
-            st.success("🟠 **Market:** Prime condition for retail and grocery sales.")
+        # --- CONDITION: Show tips only if it's a real tomato ---
+        if v_label != "non_tomato":
+            f_score = res_variety.get("fuzzy_ripeness", 0)
+            
+            # Maturity Insight
+            if f_score < 40:
+                st.warning("🟢 **Logistics:** High durability. Best for long-distance shipping.")
+            elif f_score < 75:
+                st.success("🟠 **Market:** Prime condition for retail and grocery sales.")
+            else:
+                st.error("🔴 **Urgent:** Short shelf-life. Immediate processing (sauce/paste) recommended.")
+            
+            # Detailed Info from utils.py
+            rec = res_variety.get("recommendation")
+            if isinstance(rec, dict):
+                st.markdown(f"### Characteristics")
+                st.caption(rec.get("description", "No description available."))
+                
+                st.markdown("### ⏳ Shelf Life Expectancy")
+                sl = rec.get("shelf_life", {})
+                st.markdown(f"""
+                    <div style="display:flex; gap:8px;">
+                        <div style="flex:1; background:#FFF3E0; padding:10px; border-radius:8px; text-align:center; border:1px solid #FFB74D; color: #000;">
+                            <small style="font-size: 10px;">🏠 Room Temp</small><br><b style="font-size:16px;">{sl.get('room_temp_days', 0)} Days</b>
+                        </div>
+                        <div style="flex:1; background:#E3F2FD; padding:10px; border-radius:8px; text-align:center; border:1px solid #64B5F6; color: #000;">
+                            <small style="font-size: 10px;">❄️ Fridge</small><br><b style="font-size:16px;">{sl.get('refrigerated_days', 0)} Days</b>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Climate Guidance
+                if "temperature_feasibility" in rec:
+                    tf = rec["temperature_feasibility"]
+                    st.info(f"🌡️ **Ideal Temp:** {tf['ideal_temp_c'][0]}°C - {tf['ideal_temp_c'][1]}°C")
         else:
-            st.error("🔴 **Urgent:** Short shelf-life. Immediate processing (sauce/paste) recommended.")
-        
-        # Variety Deep-Dive
-        rec = res_variety.get("recommendation")
-        if isinstance(rec, dict):
-            st.subheader("Description")
-            st.write(rec.get("description"))
-            st.subheader("Lifespan")
-            st.write(rec.get("plant_lifespan"))
-            st.markdown(f"**{v_name} Characteristics:**")
-            st.caption(rec.get('description'))
-            
-            # Shelf Life Display
-            sl = rec.get("shelf_life", {})
-            st.markdown(f"""
-                <div style="display:flex; gap:10px;">
-                    <div style="flex:1; background:#FFF3E0; padding:10px; border-radius:8px; text-align:center; border:1px solid #FFB74D;">
-                        <small>🏠 Room</small><br><b>{sl.get('room_temp_days')} Days</b>
-                    </div>
-                    <div style="flex:1; background:#E3F2FD; padding:10px; border-radius:8px; text-align:center; border:1px solid #64B5F6;">
-                        <small>❄️ Fridge</small><br><b>{sl.get('refrigerated_days')} Days</b>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Climate Info
-            if "temperature_feasibility" in rec:
-                tf = rec["temperature_feasibility"]
-                st.info(f"🌡️ **Ideal Temp:** {tf['ideal_temp_c'][0]}°C - {tf['ideal_temp_c'][1]}°C")
-
+            st.info("No agricultural recommendations available for this object.")
 # -------------------------------------------------
 # 6. SUPABASE SYNC
 # -------------------------------------------------
