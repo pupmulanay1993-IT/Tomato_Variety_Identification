@@ -383,7 +383,7 @@ with btn_col1:
         <style>
         div[data-testid="column"]:nth-of-type(1) button {
             background-color: #FF6600 !important;
-            color: white !important;
+            color: black !important;
             font-weight: bold !important;
             border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
@@ -403,7 +403,7 @@ with btn_col2:
         <style>
         div[data-testid="column"]:nth-of-type(2) button {
             background-color: #1E90FF !important;
-            color: white !important;
+            color: black !important;
             font-weight: bold !important;
             border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
