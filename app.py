@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 from PIL import Image
 import io
 import numpy as np
@@ -447,12 +447,80 @@ with col1:
 
     else:
         # Camera integration logic
-        ctx = webrtc_streamer(
-            key="tomato-cam",
-            video_transformer_factory=VideoTransformer,
-            media_stream_constraints={"video": True},
-            rtc_configuration={"iceServers": [{"urls": ["stun:stun1.l.google.com:19302"]}]},
-        )
+        # Build RTC configuration (supports STUN + TURN via Streamlit secrets)
+        def _build_rtc_configuration():
+            # Multiple default STUN servers to improve candidate gathering
+            ice_servers = [
+                {"urls": ["stun:stun.l.google.com:19302"]},
+                {"urls": ["stun:stun1.l.google.com:19302"]},
+                {"urls": ["stun:stun2.l.google.com:19302"]},
+            ]
+            try:
+                # If a full ICE_SERVERS secret is provided (JSON list), extend defaults without overwriting
+                ice_secret = st.secrets.get("ICE_SERVERS")
+                if ice_secret:
+                    parsed = []
+                    if isinstance(ice_secret, str):
+                        try:
+                            parsed = json.loads(ice_secret)
+                        except Exception:
+                            parsed = []
+                    elif isinstance(ice_secret, list):
+                        parsed = ice_secret
+
+                    # Merge parsed entries, avoid duplicates by URL
+                    for srv in parsed:
+                        try:
+                            srv_urls = srv.get("urls") if isinstance(srv.get("urls"), list) else [srv.get("urls")]
+                        except Exception:
+                            srv_urls = []
+                        duplicate = False
+                        for existing in ice_servers:
+                            existing_urls = existing.get("urls") if isinstance(existing.get("urls"), list) else [existing.get("urls")]
+                            if set(existing_urls) & set(srv_urls):
+                                duplicate = True
+                                break
+                        if not duplicate:
+                            ice_servers.append(srv)
+
+                # Support a single TURN server via TURN_URL / TURN_USER / TURN_PASS secrets (append if present)
+                turn_url = st.secrets.get("TURN_URL")
+                turn_user = st.secrets.get("TURN_USER")
+                turn_pass = st.secrets.get("TURN_PASS")
+                if turn_url and turn_user:
+                    # avoid adding duplicate TURN entry
+                    urls_flat = []
+                    for s in ice_servers:
+                        u = s.get("urls")
+                        if isinstance(u, list):
+                            urls_flat.extend(u)
+                        elif isinstance(u, str):
+                            urls_flat.append(u)
+                    if turn_url not in urls_flat:
+                        ice_servers.append({"urls": [turn_url], "username": turn_user, "credential": turn_pass})
+            except Exception:
+                pass
+            return {"iceServers": ice_servers}
+
+        rtc_cfg = _build_rtc_configuration()
+        # Inform user if TURN is not present (may be required for strict NATs)
+        has_turn = any(("turn:" in (u if isinstance(u, str) else u[0]) for s in rtc_cfg.get("iceServers", []) for u in (s.get("urls") if isinstance(s.get("urls"), list) else [s.get("urls")]) if u))
+        if not has_turn:
+            st.info("Live camera connections may be slow or fail behind strict NATs. Configure a TURN server in Streamlit secrets (TURN_URL, TURN_USER, TURN_PASS) for reliable connections.")
+
+        # Prefer rear-facing camera on mobile; audio disabled by default
+        media_constraints = {"video": {"facingMode": "environment"}, "audio": False}
+
+        try:
+            ctx = webrtc_streamer(
+                key="tomato-cam",
+                video_transformer_factory=VideoTransformer,
+                media_stream_constraints=media_constraints,
+                rtc_configuration=rtc_cfg,
+            )
+        except Exception as e:
+            st.error(f"Live camera initialization failed: {e}")
+            ctx = None
         if ctx.video_transformer and st.button("📸 Capture & Analyze"):
             frame = ctx.video_transformer.latest_frame
             if frame is not None:
