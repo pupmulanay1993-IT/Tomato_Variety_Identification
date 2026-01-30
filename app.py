@@ -368,9 +368,10 @@ class VideoTransformer(VideoTransformerBase):
         return self.latest_frame
 
 # -------------------------------------------------
-# 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL)
+# 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL - BLACK FONT)
 # -------------------------------------------------
-# STEP 1: Initialize variables before columns
+
+# STEP 1: FIX NAMEERROR - Initialize variables before columns
 res_variety = None
 res_colors = None
 
@@ -378,12 +379,12 @@ res_colors = None
 btn_col1, btn_col2 = st.columns(2)
 
 with btn_col1:
-    # Orange "View All" Button - Compact UI
+    # Orange "View All" Button - Black Font
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(1) button {
             background-color: #FF6600 !important;
-            color: black !important;
+            color: black !important; /* Font color changed to black */
             font-weight: bold !important;
             border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
@@ -398,12 +399,12 @@ with btn_col1:
         st.session_state.show_predictions = True
 
 with btn_col2:
-    # Blue "Download" Button - Compact UI
+    # Blue "Download" Button - Black Font
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(2) button {
             background-color: #1E90FF !important;
-            color: black !important;
+            color: black !important; /* Font color changed to black */
             font-weight: bold !important;
             border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
@@ -434,7 +435,7 @@ with btn_col2:
 st.markdown("<div style='margin-bottom: -20px;'></div>", unsafe_allow_html=True)
 st.divider()
 
-# STEP 4: MAIN COLUMNS (Input and Results)
+# STEP 4: MAIN COLUMNS
 col1, col2, col3 = st.columns([1, 1, 1], gap="small")
 
 with col1:
