@@ -2,6 +2,7 @@ numpy==1.24.3
 scipy
 networkx
 scikit-fuzzy
+scikit-learn
 streamlit
 tensorflow
 Pillow
