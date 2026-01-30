@@ -263,11 +263,14 @@ st.markdown(
 
 /* 5. BUTTONS & METRICS */
 div.stButton > button {{
-    font-size: 12px !important;
-    padding: 5px 10px !important;
+    font-size: 11px !important; /* Bahagyang pinaliit para sa mobile */
+    padding: 8px 5px !important;
     border-radius: 8px !important;
     text-transform: uppercase;
     font-weight: bold !important;
+    width: 100%;
+    white-space: nowrap; /* Tinitiyak na hindi mapuputol ang text */
+    overflow: visible;
 }}
 [data-testid="stMetricValue"] {{ color: #FFFFFF !important; font-weight: bold !important; }}
 h1, h2, h3, h4, h5, h6 {{ color: #FFFFFF !important; }}
@@ -368,74 +371,33 @@ class VideoTransformer(VideoTransformerBase):
         return self.latest_frame
 
 # -------------------------------------------------
-# 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL - ORANGE & BLUE)
+# 5. UI LAYOUT & DISPLAY (STRICT FIX)
 # -------------------------------------------------
-
-# STEP 1: FIX NAMEERROR - Initialize variables before columns
 res_variety = None
 res_colors = None
 
-# STEP 2: HORIZONTAL BUTTONS (VIEW ALL & DOWNLOAD)
-btn_col1, btn_col2 = st.columns(2)
+# Gagamit tayo ng 2 columns na saktong 50/50 sa mobile
+col_view, col_download = st.columns(2)
 
-with btn_col1:
-    # ORANGE "View All" Button
-    st.markdown("""
-        <style>
-        div[data-testid="column"]:nth-of-type(1) button {
-            background-color: #FF6600 !important; /* Original Orange */
-            color: black !important;
-            font-weight: bold !important;
-            border-radius: 8px !important;
-            border: 1px solid #FFD700 !important;
-            height: 35px !important;
-            font-size: 10px !important;
-            margin-bottom: 0px !important;
-            text-transform: uppercase;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+with col_view:
+    # Stylized View All
+    st.markdown('<style>div[data-testid="column"]:nth-of-type(1) button { background-color: #FF6600 !important; color: white !important; height: 45px !important; }</style>', unsafe_allow_html=True)
     if st.button("👁️ VIEW ALL", use_container_width=True, key="btn_view"):
         st.session_state.show_predictions = True
 
-with btn_col2:
-    # BLUE "Download" Button
-    st.markdown("""
-        <style>
-        div[data-testid="column"]:nth-of-type(2) button {
-            background-color: #1E90FF !important; /* Original Blue */
-            color: black !important;
-            font-weight: bold !important;
-            border-radius: 8px !important;
-            border: 1px solid #FFD700 !important;
-            height: 35px !important;
-            font-size: 10px !important;
-            margin-bottom: 0px !important;
-            text-transform: uppercase;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+with col_download:
+    # Stylized Download
+    st.markdown('<style>div[data-testid="column"]:nth-of-type(2) button { background-color: #1E90FF !important; color: white !important; height: 45px !important; }</style>', unsafe_allow_html=True)
     if st.button("📥 DOWNLOAD", use_container_width=True, key="btn_download"):
         predictions = fetch_all_predictions()
         if predictions:
             excel_data = convert_predictions_to_excel(predictions)
             if excel_data:
-                st.download_button(
-                    label="💾 CONFIRM",
-                    data=excel_data,
-                    file_name="tomato_predictions.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="excel_trigger"
-                )
-        else:
-            st.warning("No records found.")
+                st.download_button("CONFIRM", excel_data, "tomato.xlsx", use_container_width=True)
 
-# STEP 3: TIGHTEN THE LAYOUT
-st.markdown("<div style='margin-bottom: -20px;'></div>", unsafe_allow_html=True)
 st.divider()
 
-# STEP 4: MAIN COLUMNS
+# Ito ang main grid para sa results
 col1, col2, col3 = st.columns([1, 1, 1], gap="small")
 
 with col1:
