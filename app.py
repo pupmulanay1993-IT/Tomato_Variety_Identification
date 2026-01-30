@@ -146,7 +146,7 @@ def convert_predictions_to_excel(predictions):
     return output.getvalue()
 
 # -------------------------------------------------
-# 3. VARIETY-AWARE PREDICTION LOGIC
+# 3.1. VARIETY-AWARE PREDICTION LOGIC
 # -------------------------------------------------
 def run_prediction(pil_image):
     # STEP A: Identification (CNN)
@@ -182,7 +182,7 @@ def run_prediction(pil_image):
     return result, res_colors
 
 # -------------------------------------------------
-# 3. STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
+# STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
 # -------------------------------------------------
 st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
 
@@ -284,7 +284,7 @@ h1, h2, h3, h4, h5, h6 {{ color: #FFFFFF !important; }}
 )
 
 # -------------------------------------------------
-# 4. PREDICTION HELPER (Optimized for Variety-Aware Fuzzy Logic)
+# 3.2. PREDICTION HELPER (Optimized for Variety-Aware Fuzzy Logic)
 # -------------------------------------------------
 def _get_model_input_size(model, fallback=(224, 224)):
     try:
@@ -368,40 +368,38 @@ class VideoTransformer(VideoTransformerBase):
         return self.latest_frame
 
 # -------------------------------------------------
-# 5. UI LAYOUT & DISPLAY (FULL MOBILE-OPTIMIZED)
+# 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL)
 # -------------------------------------------------
-col_view, col_download = st.columns(2)
+btn_col1, btn_col2 = st.columns(2)
 
-with col_view:
-    # Orange "View All" Button
+with btn_col1:
+    # Orange "View All" - compact version
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(1) button {
             background-color: #FF6600 !important;
             color: white !important;
-            font-weight: bold !important;
-            border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
-            height: 38px !important;
-            font-size: 11px !important;
+            height: 35px !important; /* Pinababa ang height */
+            font-size: 10px !important; /* Mas maliit na text para hindi mag-wrap */
+            margin-bottom: 0px !important;
         }
         </style>
     """, unsafe_allow_html=True)
     if st.button("👁️ VIEW ALL", use_container_width=True, key="btn_view"):
         st.session_state.show_predictions = True
 
-with col_download:
-    # Blue "Download" Button
+with btn_col2:
+    # Blue "Download" - compact version
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(2) button {
             background-color: #1E90FF !important;
             color: white !important;
-            font-weight: bold !important;
-            border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
-            height: 38px !important;
-            font-size: 11px !important;
+            height: 35px !important;
+            font-size: 10px !important;
+            margin-bottom: 0px !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -411,21 +409,19 @@ with col_download:
             excel_data = convert_predictions_to_excel(predictions)
             if excel_data:
                 st.download_button(
-                    label="CONFIRM",
+                    label="OK",
                     data=excel_data,
                     file_name="tomato_predictions.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
-                    key="excel_download_trigger"
+                    key="excel_trigger"
                 )
-        else:
-            st.warning("No data yet.")
 
+st.markdown("<div style='margin-bottom: -15px;'></div>", unsafe_allow_html=True) # Para itaas pa lalo ang divider
 st.divider()
 
-# --- MAIN COLUMNS 
-col1, col2, col3 = st.columns([1, 1, 1], gap="small")
-res_variety, res_colors = None, None
+# Para siguradong angat ang col1, col2, col3
+col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
     st.subheader("📷 Image Input")
