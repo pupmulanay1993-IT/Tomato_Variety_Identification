@@ -439,69 +439,48 @@ with col1:
                         save_data = res_variety.copy()
                         if "recommendation" in save_data and isinstance(save_data["recommendation"], dict):
                             save_data["recommendation"] = json.dumps(save_data["recommendation"])
+                        
+                        # Siguraduhin ang unique ID
+                        save_data["id"] = str(uuid.uuid4())
+                        
                         supabase.table("tomato_logs").insert([save_data]).execute()
                         st.caption("✅ Saved to database.")
                     except Exception as e:
                         st.error(f"Sync failed: {e}")
 
     else:
-        # Optimized Camera integration logic
-        def _build_rtc_configuration():
-            # Default public STUN servers
-            ice_servers = [
-                {"urls": ["stun:stun.l.google.com:19302"]},
-                {"urls": ["stun:stun1.l.google.com:19302"]},
-                {"urls": ["stun:stun2.l.google.com:19302"]},
-            ]
-            try:
-                # Add TURN server from Secrets if available
-                turn_url = st.secrets.get("TURN_URL")
-                turn_user = st.secrets.get("TURN_USER")
-                turn_pass = st.secrets.get("TURN_PASS")
-                if turn_url and turn_user:
-                    ice_servers.append({
-                        "urls": [turn_url], 
-                        "username": turn_user, 
-                        "credential": turn_pass
-                    })
-            except Exception:
-                pass
-            return {"ice_servers": ice_servers} # Note: using snake_case 'ice_servers' for internal dictionary
+        # FAIL-SAFE CAMERA: Gamit ang st.camera_input
+        st.info("💡 Tip: Click 'Take Photo' to scan the tomato variety.")
+        
+        # Bubuksan nito ang native camera app ng cellphone mo
+        camera_photo = st.camera_input("Scan Tomato")
 
-        rtc_cfg = _build_rtc_configuration()
-
-        # Camera constraints: environment means back camera on mobile
-        media_constraints = {"video": {"facingMode": "environment"}, "audio": False}
-
-        try:
-            ctx = webrtc_streamer(
-                key="tomato-cam",
-                video_transformer_factory=VideoTransformer,
-                media_stream_constraints=media_constraints,
-                rtc_configuration=rtc_cfg,
-            )
-        except Exception as e:
-            st.error(f"Live camera initialization failed: {e}")
-            ctx = None
-
-        if ctx and ctx.video_transformer and st.button("📸 Capture & Analyze"):
-            frame = ctx.video_transformer.latest_frame
-            if frame is not None:
-                image_to_process = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                st.image(image_to_process, use_container_width=True, caption="Captured Frame")
-                with st.spinner("Analyzing frame..."):
-                    res_variety, res_colors = run_prediction(image_to_process)
-                    res_variety["source"] = "Live Scan"
-                    if supabase and res_variety.get("variety_label") != "Unknown":
-                        try:
-                            save_data = res_variety.copy()
-                            if "recommendation" in save_data and isinstance(save_data["recommendation"], dict):
-                                save_data["recommendation"] = json.dumps(save_data["recommendation"])
-                            supabase.table("tomato_logs").insert([save_data]).execute()
-                            st.caption("✅ Saved to database.")
-                        except Exception as e:
-                            st.error(f"Sync failed: {e}")                            
-
+        if camera_photo:
+            # I-convert ang photo para ma-process ng model
+            image_to_process = Image.open(camera_photo)
+            
+            # I-display ang litrato sa interface
+            st.image(image_to_process, use_container_width=True, caption="Captured Image")
+            
+            with st.spinner("🔍 Analyzing tomato variety..."):
+                res_variety, res_colors = run_prediction(image_to_process)
+                res_variety["source"] = "Live Scan"
+                
+                # Auto-sync to Supabase
+                if supabase and res_variety.get("variety_label") != "Unknown":
+                    try:
+                        save_data = res_variety.copy()
+                        if "recommendation" in save_data and isinstance(save_data["recommendation"], dict):
+                            save_data["recommendation"] = json.dumps(save_data["recommendation"])
+                        
+                        # Metadata/ID
+                        save_data["id"] = str(uuid.uuid4())
+                        
+                        supabase.table("tomato_logs").insert([save_data]).execute()
+                        st.success("✅ Analysis successful and saved to history!")
+                    except Exception as e:
+                        st.error(f"Sync failed: {e}")
+                        
 with col2:
     st.subheader("📊 Processing")
     if res_variety:
