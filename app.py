@@ -370,19 +370,27 @@ class VideoTransformer(VideoTransformerBase):
 # -------------------------------------------------
 # 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL)
 # -------------------------------------------------
+# STEP 1: Initialize variables before columns
+res_variety = None
+res_colors = None
+
+# STEP 2: HORIZONTAL BUTTONS (VIEW ALL & DOWNLOAD)
 btn_col1, btn_col2 = st.columns(2)
 
 with btn_col1:
-    # Orange "View All" - compact version
+    # Orange "View All" Button - Compact UI
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(1) button {
             background-color: #FF6600 !important;
             color: white !important;
+            font-weight: bold !important;
+            border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
-            height: 35px !important; /* Pinababa ang height */
-            font-size: 10px !important; /* Mas maliit na text para hindi mag-wrap */
+            height: 35px !important;
+            font-size: 10px !important;
             margin-bottom: 0px !important;
+            text-transform: uppercase;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -390,16 +398,19 @@ with btn_col1:
         st.session_state.show_predictions = True
 
 with btn_col2:
-    # Blue "Download" - compact version
+    # Blue "Download" Button - Compact UI
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(2) button {
             background-color: #1E90FF !important;
             color: white !important;
+            font-weight: bold !important;
+            border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
             height: 35px !important;
             font-size: 10px !important;
             margin-bottom: 0px !important;
+            text-transform: uppercase;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -409,19 +420,22 @@ with btn_col2:
             excel_data = convert_predictions_to_excel(predictions)
             if excel_data:
                 st.download_button(
-                    label="OK",
+                    label="💾 CONFIRM",
                     data=excel_data,
                     file_name="tomato_predictions.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
                     key="excel_trigger"
                 )
+        else:
+            st.warning("No records found.")
 
-st.markdown("<div style='margin-bottom: -15px;'></div>", unsafe_allow_html=True) # Para itaas pa lalo ang divider
+# STEP 3: TIGHTEN THE LAYOUT
+st.markdown("<div style='margin-bottom: -20px;'></div>", unsafe_allow_html=True)
 st.divider()
 
-# Para siguradong angat ang col1, col2, col3
-col1, col2, col3 = st.columns([1, 1, 1])
+# STEP 4: MAIN COLUMNS (Input and Results)
+col1, col2, col3 = st.columns([1, 1, 1], gap="small")
 
 with col1:
     st.subheader("📷 Image Input")
