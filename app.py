@@ -368,7 +368,7 @@ class VideoTransformer(VideoTransformerBase):
         return self.latest_frame
 
 # -------------------------------------------------
-# 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL - BLACK FONT)
+# 5. UI LAYOUT & DISPLAY (STRICT HORIZONTAL - ORANGE & BLUE)
 # -------------------------------------------------
 
 # STEP 1: FIX NAMEERROR - Initialize variables before columns
@@ -379,12 +379,12 @@ res_colors = None
 btn_col1, btn_col2 = st.columns(2)
 
 with btn_col1:
-    # Orange "View All" Button - Black Font
+    # ORANGE "View All" Button
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(1) button {
-            background-color: #FF6600 !important;
-            color: black !important; /* Font color changed to black */
+            background-color: #FF6600 !important; /* Original Orange */
+            color: black !important;
             font-weight: bold !important;
             border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
@@ -399,12 +399,12 @@ with btn_col1:
         st.session_state.show_predictions = True
 
 with btn_col2:
-    # Blue "Download" Button - Black Font
+    # BLUE "Download" Button
     st.markdown("""
         <style>
         div[data-testid="column"]:nth-of-type(2) button {
-            background-color: #1E90FF !important;
-            color: black !important; /* Font color changed to black */
+            background-color: #1E90FF !important; /* Original Blue */
+            color: black !important;
             font-weight: bold !important;
             border-radius: 8px !important;
             border: 1px solid #FFD700 !important;
