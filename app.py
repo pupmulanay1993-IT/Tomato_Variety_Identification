@@ -466,7 +466,7 @@ with col1:
                     })
             except Exception:
                 pass
-            return {"iceServers": ice_servers}
+            return {"ice_servers": ice_servers} # Note: using snake_case 'ice_servers' for internal dictionary
 
         rtc_cfg = _build_rtc_configuration()
 
@@ -479,8 +479,6 @@ with col1:
                 video_transformer_factory=VideoTransformer,
                 media_stream_constraints=media_constraints,
                 rtc_configuration=rtc_cfg,
-                # Pinapanatili ang connection kahit mag-fluctuate ang net
-                connection_factory=None, 
             )
         except Exception as e:
             st.error(f"Live camera initialization failed: {e}")
@@ -502,7 +500,8 @@ with col1:
                             supabase.table("tomato_logs").insert([save_data]).execute()
                             st.caption("✅ Saved to database.")
                         except Exception as e:
-                            st.error(f"Sync failed: {e}")
+                            st.error(f"Sync failed: {e}")                            
+
 with col2:
     st.subheader("📊 Processing")
     if res_variety:
