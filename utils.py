@@ -1,4 +1,4 @@
-﻿import json
+import json
 from PIL import Image
 import numpy as np
 import cv2
