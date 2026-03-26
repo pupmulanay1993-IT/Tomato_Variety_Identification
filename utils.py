@@ -67,6 +67,31 @@ def is_tomato_bouncer(image, min_tomato_percent=5):
     return hsv_percent >= min_tomato_percent
 
 # -------------------------------------------------
+# SHELF LIFE ADJUSTMENT (Ripeness-aware)
+# -------------------------------------------------
+def adjust_shelf_life_for_ripeness(shelf_life, ripeness_score):
+    """Adjust shelf-life days by ripeness:
+    - Hilaw (green): longer longevity
+    - Hinog (orange/yellow): baseline
+    - Overripe (red): shorter longevity
+    """
+    if not shelf_life or not isinstance(shelf_life, dict):
+        return shelf_life
+
+    room_days = int(shelf_life.get("room_temp_days", 0))
+    fridge_days = int(shelf_life.get("refrigerated_days", 0))
+
+    if ripeness_score < 40:  # green/hilaw
+        room_days = max(1, room_days + 9)
+        fridge_days = max(1, fridge_days + 17)
+    elif ripeness_score >= 75:  # overripe/lanta
+        room_days = max(1, room_days - 1)
+        fridge_days = max(1, fridge_days - 2)
+    # else ripe/hinog -> baseline values
+
+    return {"room_temp_days": room_days, "refrigerated_days": fridge_days}
+
+# -------------------------------------------------
 # IMAGE PREPROCESSING
 # -------------------------------------------------
 def clean_image(image, target_size=(224, 224)):
