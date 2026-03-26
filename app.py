@@ -21,6 +21,7 @@ from utils import (
     is_tomato_bouncer,
     detect_multi_colors,
     compute_color_scores,
+    adjust_shelf_life_for_ripeness,
 )
 
 # -------------------------------------------------
@@ -55,7 +56,7 @@ ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
 # -------------------------------------------------
 @st.cache_resource
 def load_tomato_model():
-    """Loads the pre-trained Keras model for tomato variety classification."""
+    """Loads the pre-trained (MobileNetV2) Keras model for tomato variety classification."""
     try:
         return tf.keras.models.load_model("tomato_model.keras", compile=False)
     except Exception as e:
@@ -564,13 +565,20 @@ with col3:
                 
                 st.markdown("### ⏳ Shelf Life Expectancy")
                 sl = rec.get("shelf_life", {})
+                adjusted_sl = adjust_shelf_life_for_ripeness(sl, f_score)
+
+                if f_score < 40:
+                    st.info("🟢 Unripe (Hilaw): longer shelf life expected compared to ripe tomato.")
+                elif f_score >= 75:
+                    st.warning("🔴 Overripe (Lanta): shorter shelf life expected; consume soon.")
+
                 st.markdown(f"""
                     <div style="display:flex; gap:8px;">
                         <div style="flex:1; background:#FFF3E0; padding:10px; border-radius:8px; text-align:center; border:1px solid #FFB74D; color: #000;">
-                            <small style="font-size: 10px;">🏠 Room Temp</small><br><b style="font-size:16px;">{sl.get('room_temp_days', 0)} Days</b>
+                            <small style="font-size: 10px;">🏠 Room Temp</small><br><b style="font-size:16px;">{adjusted_sl.get('room_temp_days', 0)} Days</b>
                         </div>
                         <div style="flex:1; background:#E3F2FD; padding:10px; border-radius:8px; text-align:center; border:1px solid #64B5F6; color: #000;">
-                            <small style="font-size: 10px;">❄️ Fridge</small><br><b style="font-size:16px;">{sl.get('refrigerated_days', 0)} Days</b>
+                            <small style="font-size: 10px;">❄️ Fridge</small><br><b style="font-size:16px;">{adjusted_sl.get('refrigerated_days', 0)} Days</b>
                         </div>
                     </div>
                 """, unsafe_allow_html=True)
