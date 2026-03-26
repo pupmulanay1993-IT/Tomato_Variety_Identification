@@ -55,6 +55,7 @@ ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
 # -------------------------------------------------
 @st.cache_resource
 def load_tomato_model():
+    """Loads the pre-trained Keras model for tomato variety classification."""
     try:
         return tf.keras.models.load_model("tomato_model.keras", compile=False)
     except Exception as e:
@@ -63,6 +64,7 @@ def load_tomato_model():
 
 @st.cache_resource
 def init_supabase() -> Client:
+    """Establishes a connection to the Supabase database using secrets."""
     try:
         return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     except:
@@ -70,29 +72,32 @@ def init_supabase() -> Client:
 
 @st.cache_data
 def get_base64_of_bin_file(bin_file):
+    """Encodes a local binary file (like an image) to base64 for CSS/HTML injection."""
     try:
         with open(bin_file, "rb") as f:
             return base64.b64encode(f.read()).decode()
     except:
         return ""
 
+# Initialize global instances
 supabase = init_supabase()
 model = load_tomato_model()
 models = [model] if model else []
 
-# Load Class Indices
+# Load Class Indices (Maps numeric model output to human-readable labels)
 try:
     with open("class_indices.json", "r") as f:
         class_mapping = json.load(f)
     idx_to_label = {int(v): k for k, v in class_mapping.items()}
 except:
+    # Fallback labels if the JSON mapping is missing
     idx_to_label = {0: "apollo_tomato", 1: "atlas_tomato", 2: "cherry_tomato", 3: "diamante_tomato", 
                     4: "kinalabasa_tomato", 5: "non_tomato", 6: "pear_tomato", 7: "rio_grande_tomato", 8: "roma_tomato"}
 
 def convert_to_serializable(obj):
     """
-    Converts NumPy types and other non-standard objects 
-    into standard Python types for JSON compatibility.
+    Recursively converts NumPy types and other non-standard objects 
+    into standard Python types for JSON compatibility and database insertion.
     """
     if isinstance(obj, np.integer):
         return int(obj)
@@ -108,7 +113,7 @@ def convert_to_serializable(obj):
         return obj
 
 def fetch_all_predictions():
-    """Fetch all prediction records from Supabase."""
+    """Retrieves all historical classification records from the Supabase 'tomato_logs' table."""
     if not supabase:
         return None
     try:
@@ -119,12 +124,16 @@ def fetch_all_predictions():
         return None
 
 def convert_predictions_to_excel(predictions):
-    """Convert predictions to Excel format."""
+    """
+    Processes raw database records into a flattened DataFrame and 
+    exports it as an Excel binary stream for user download.
+    """
     if not predictions:
         return None
     
     flattened_data = []
     for pred in predictions:
+        # Map DB columns to human-readable Excel headers
         row = {
             "ID": pred.get("id"),
             "Variety Label": pred.get("variety_label"),
@@ -195,93 +204,79 @@ st.markdown(
 <style>
 /* 1. BASE APP & BACKGROUND */
 .stApp {{
-    background-image: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+    /* Lightened the overlay slightly but increased contrast for text */
+    background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
                       url("data:image/jpg;base64,{background_base64}");
     background-size: cover;
     background-position: center;
-    color: white !important;
-    font-weight: 600;
+    color: #FFFFFF !important;
 }}
 
-/* 2. RESPONSIVE HEADER (LOGO - TEXT - LOGO) */
-.header-container {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0px;
-    margin-bottom: 20px;
-}}
-
+/* 2. HEADER STYLING */
 .header-text {{
-    font-size: clamp(1.2rem, 5vw, 2rem); /* Dynamic para sa selpon */
-    font-weight: bold;
-    color: #FFD700 !important;
+    font-size: clamp(1.5rem, 6vw, 2.5rem); 
+    font-weight: 800;
+    color: #FFD700 !important; /* Vivid Gold */
+    text-shadow: 2px 2px 4px #000000; /* Drop shadow for readability */
     text-align: center;
     flex-grow: 1;
-    line-height: 1.2;
 }}
 
-.logo-img {{
-    width: clamp(45px, 10vw, 65px); /* Responsive logos */
-    height: auto;
+/* 3. WIDGET VISIBILITY */
+/* Force all labels (Radio, Selectbox, Upload) to solid white */
+.stWidget label p {{
+    color: #FFFFFF !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
 }}
 
-/* 3. RADIO & UPLOADER VISIBILITY */
-.stRadio label, .stRadio div, .stRadio span {{ color: white !important; }}
-.stFileUploader {{ 
-    background-color: rgba(255,255,255,0.9); 
-    border-radius: 10px; 
-    padding: 10px; 
+/* File Uploader - High Contrast */
+[data-testid="stFileUploader"] {{
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    padding: 20px;
+    border-radius: 15px;
+}}
+[data-testid="stFileUploader"] section {{
     color: #000000 !important;
 }}
-.stFileUploader p, .stFileUploader span, .uploadedFile {{ color: #000000 !important; }}
 
-/* 4. ALERTS & MESSAGES (YOUR ORIGINAL COLORS) */
+/* 4. ALERT BOXES - Increased Opacity for Visibility */
 .stSuccess {{
-    color: white !important;
-    background-color: rgba(0, 100, 0, 0.8) !important;
-    padding: 15px !important;
-    border-radius: 5px !important;
+    background-color: rgba(28, 131, 22, 0.95) !important; /* Solid Green */
+    border: 2px solid #ffffff;
 }}
-.stSuccess p, .stSuccess strong {{ color: #FF6600 !important; font-size: 18px !important; font-weight: bold !important; }}
+.stSuccess p {{ color: #FFFFFF !important; font-weight: bold !important; }}
 
 .stInfo {{
-    color: white !important;
-    background-color: rgba(0, 50, 100, 0.2) !important;
-    padding: 15px !important;
-    border-radius: 5px !important;
+    background-color: rgba(0, 104, 201, 0.9) !important; /* Solid Blue */
+    border: 1px solid #ffffff;
 }}
-.stInfo p, .stInfo strong {{ color: #FF6600 !important; font-size: 16px !important; font-weight: bold !important; }}
+.stInfo p {{ color: #FFFFFF !important; font-weight: bold !important; }}
 
 .stWarning {{
-    color: white !important;
-    background-color: rgba(100, 50, 0, 0.5) !important;
-    padding: 15px !important;
-    border-radius: 5px !important;
+    background-color: rgba(255, 75, 75, 0.9) !important; /* Solid Red/Orange */
+    border: 1px solid #ffffff;
 }}
-.stWarning p, .stWarning strong {{ color: #FFFFFF !important; font-size: 16px !important; font-weight: bold !important; }}
+.stWarning p {{ color: #FFFFFF !important; font-weight: bold !important; }}
 
-/* 5. BUTTONS & METRICS */
-div.stButton > button {{
-    font-size: 11px !important; /* Bahagyang pinaliit para sa mobile */
-    padding: 8px 5px !important;
-    border-radius: 8px !important;
-    text-transform: uppercase;
-    font-weight: bold !important;
-    width: 100%;
-    white-space: nowrap; /* Tinitiyak na hindi mapuputol ang text */
-    overflow: visible;
+/* 5. METRICS & TEXT */
+[data-testid="stMetricValue"] {{ 
+    color: #00FF00 !important; /* Neon green for the 99% confidence */
+    font-size: 3rem !important;
+    font-weight: 800 !important;
+    text-shadow: 2px 2px 5px #000000;
 }}
-[data-testid="stMetricValue"] {{ color: #FFFFFF !important; font-weight: bold !important; }}
-h1, h2, h3, h4, h5, h6 {{ color: #FFFFFF !important; }}
+[data-testid="stMetricLabel"] p {{
+    color: #FFFFFF !important;
+    font-size: 1.2rem !important;
+}}
 
+/* Standard text readability */
+p, span, li {{
+    color: #FFFFFF !important;
+    font-weight: 500 !important;
+}}
 </style>
-
-<div class="header-container">
-    <img src="data:image/png;base64,{logo_left_base64}" class="logo-img">
-    <div class="header-text">Tomato Variety Identification</div>
-    <img src="data:image/png;base64,{logo_right_base64}" class="logo-img">
-</div>
 """,
     unsafe_allow_html=True,
 )
