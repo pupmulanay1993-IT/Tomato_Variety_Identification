@@ -204,7 +204,6 @@ st.markdown(
 <style>
 /* 1. BASE APP & BACKGROUND */
 .stApp {{
-    /* Lightened the overlay slightly but increased contrast for text */
     background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
                       url("data:image/jpg;base64,{background_base64}");
     background-size: cover;
@@ -212,25 +211,38 @@ st.markdown(
     color: #FFFFFF !important;
 }}
 
-/* 2. HEADER STYLING */
-.header-text {{
-    font-size: clamp(1.5rem, 6vw, 2.5rem); 
-    font-weight: 800;
-    color: #FFD700 !important; /* Vivid Gold */
-    text-shadow: 2px 2px 4px #000000; /* Drop shadow for readability */
-    text-align: center;
-    flex-grow: 1;
+/* 2. HEADER & LOGO STYLING (Pinagsamang Layout at Style) */
+.header-container {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0px;
+    margin-bottom: 30px;
 }}
 
-/* 3. WIDGET VISIBILITY */
-/* Force all labels (Radio, Selectbox, Upload) to solid white */
+.logo-img {{
+    width: clamp(50px, 12vw, 80px); /* Slightly larger for better visibility */
+    height: auto;
+}}
+
+.header-text {{
+    font-size: clamp(1.5rem, 5vw, 2.5rem); 
+    font-weight: 800;
+    color: #FFD700 !important; /* Vivid Gold */
+    text-shadow: 2px 2px 4px #000000; 
+    text-align: center;
+    flex-grow: 1;
+    line-height: 1.2;
+}}
+
+/* 3. WIDGET VISIBILITY - Siniguro nating puti lahat ng labels */
 .stWidget label p {{
     color: #FFFFFF !important;
     font-size: 1.1rem !important;
     font-weight: 700 !important;
 }}
 
-/* File Uploader - High Contrast */
+/* File Uploader - High Contrast (Para madaling makita) */
 [data-testid="stFileUploader"] {{
     background-color: rgba(255, 255, 255, 0.95) !important;
     padding: 20px;
@@ -240,28 +252,28 @@ st.markdown(
     color: #000000 !important;
 }}
 
-/* 4. ALERT BOXES - Increased Opacity for Visibility */
+/* 4. ALERT BOXES - Solid colors para sa readability */
 .stSuccess {{
-    background-color: rgba(28, 131, 22, 0.95) !important; /* Solid Green */
+    background-color: rgba(28, 131, 22, 0.95) !important; 
     border: 2px solid #ffffff;
 }}
 .stSuccess p {{ color: #FFFFFF !important; font-weight: bold !important; }}
 
 .stInfo {{
-    background-color: rgba(0, 104, 201, 0.9) !important; /* Solid Blue */
+    background-color: rgba(0, 104, 201, 0.9) !important; 
     border: 1px solid #ffffff;
 }}
 .stInfo p {{ color: #FFFFFF !important; font-weight: bold !important; }}
 
 .stWarning {{
-    background-color: rgba(255, 75, 75, 0.9) !important; /* Solid Red/Orange */
+    background-color: rgba(255, 75, 75, 0.9) !important; 
     border: 1px solid #ffffff;
 }}
 .stWarning p {{ color: #FFFFFF !important; font-weight: bold !important; }}
 
-/* 5. METRICS & TEXT */
+/* 5. METRICS & GENERAL TEXT */
 [data-testid="stMetricValue"] {{ 
-    color: #00FF00 !important; /* Neon green for the 99% confidence */
+    color: #00FF00 !important; /* Neon green confidence score */
     font-size: 3rem !important;
     font-weight: 800 !important;
     text-shadow: 2px 2px 5px #000000;
@@ -271,12 +283,24 @@ st.markdown(
     font-size: 1.2rem !important;
 }}
 
-/* Standard text readability */
-p, span, li {{
+p, span, li, h1, h2, h3 {{
     color: #FFFFFF !important;
     font-weight: 500 !important;
 }}
+
+/* Button Styling */
+div.stButton > button {{
+    font-weight: bold !important;
+    text-transform: uppercase;
+    border-radius: 8px !important;
+}}
 </style>
+
+<div class="header-container">
+    <img src="data:image/png;base64,{logo_left_base64}" class="logo-img">
+    <div class="header-text">Tomato Variety Identification</div>
+    <img src="data:image/png;base64,{logo_right_base64}" class="logo-img">
+</div>
 """,
     unsafe_allow_html=True,
 )
