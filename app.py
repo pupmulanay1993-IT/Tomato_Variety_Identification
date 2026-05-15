@@ -381,15 +381,13 @@ def run_prediction(pil_image):
 # -------------------------------------------------
 # 4. VIDEO TRANSFORMER FOR LIVE CAMERA
 # -------------------------------------------------
-class VideoTransformer(VideoProcessorBase):
+class VideoTransformer(VideoProcessorBase): 
     def __init__(self):
         self.latest_frame = None
     
-    def recv(self, frame: av.VideoFrame): # Pinalitan ang transform -> recv
+    def recv(self, frame: av.VideoFrame): # Dapat 'recv' ang name, hindi 'transform'
         img = frame.to_ndarray(format="bgr24")
-        # I-store ang frame para sa processing
         self.latest_frame = cv2.flip(img, 1)
-        # I-return ang frame para makita sa screen
         return av.VideoFrame.from_ndarray(self.latest_frame, format="bgr24")
 
 # -------------------------------------------------
