@@ -11,6 +11,9 @@ import pandas as pd
 from supabase import create_client, Client
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
+
+st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
+
 # Local utilities and functions
 from utils import (
     clean_image,
@@ -156,44 +159,79 @@ def convert_predictions_to_excel(predictions):
 # -------------------------------------------------
 # 3.1. VARIETY-AWARE PREDICTION LOGIC
 # -------------------------------------------------
-def run_prediction(pil_image):
-    # STEP A: Identification (CNN)
-    img_clean = clean_image(pil_image, target_size=(224, 224))
-    probs, idx, conf = get_prediction(model, img_clean)
-    variety_label = idx_to_label.get(idx, "Unknown")
-
-    # STEP B: Color Analysis (Variety-Aware)
-    hsv_p, lab_s = compute_color_scores(pil_image, variety_label=variety_label)
-
-    # STEP C: Fuzzy Logic Computation
-    ripeness_sim.input['intensity'] = np.clip(hsv_p, 0, 100)
-    ripeness_sim.input['accuracy'] = np.clip(lab_s * 100 if lab_s <= 1 else lab_s, 0, 100)
-    
+def _get_model_input_size(model, fallback=(224, 224)):
     try:
+        if hasattr(model, "inputs") and model.inputs:
+            ishape = model.inputs[0].shape
+            h = int(ishape[1]) if ishape[1] else None
+            w = int(ishape[2]) if ishape[2] else None
+            if h and w: return (h, w)
+        if hasattr(model, "input_shape") and model.input_shape:
+            ishape = model.input_shape
+            h = int(ishape[1]) if ishape[1] else None
+            w = int(ishape[2]) if ishape[2] else None
+            if h and w: return (h, w)
+    except: pass
+    return fallback
+
+def run_prediction(pil_image):
+    # STEP A: Identification (CNN Inference)
+    # Kailangan muna malaman ang variety bago ang kulay
+    img_rgb = np.array(pil_image.convert("RGB"))
+    preds_list = []
+    
+    # Suporta para sa multiple models (Ensemble)
+    for m in models:
+        h, w = _get_model_input_size(m)
+        img_clean = clean_image(pil_image, target_size=(h, w))
+        preds, indices, confs = get_prediction(m, img_clean)
+        preds_list.append(preds)
+
+    if not preds_list:
+        return None, None
+
+    avg_preds = np.mean(preds_list, axis=0)
+    idx = int(np.argmax(avg_preds))
+    conf = float(np.max(avg_preds))
+    detected_variety = idx_to_label.get(idx, "Unknown")
+
+    # STEP B: Variety-Aware Color Scoring
+    # Dito ipinapasa ang variety_label para mag-adjust ang logic sa Yellow o Red
+    hsv_percent, lab_score = compute_color_scores(pil_image, variety_label=detected_variety)
+    tomato_like = is_tomato_bouncer(pil_image)
+
+    # STEP C: Fuzzy Computation
+    try:
+        ripeness_sim.input['intensity'] = hsv_percent
+        # I-normalize ang lab_score kung 0-1 range siya
+        ripeness_sim.input['accuracy'] = lab_score * 100 if lab_score <= 1.0 else lab_score
         ripeness_sim.compute()
         fuzzy_score = ripeness_sim.output['ripeness']
     except:
         fuzzy_score = 0
 
-    # STEP D: Format Final Results
-    result = make_results(probs, idx, conf, class_indices_path="class_indices.json")
+    # STEP D: Result Formatting
+    result = make_results(avg_preds, idx, conf, class_indices_path="class_indices.json")
     result.update({
+        "variety_label": detected_variety,
+        "prediction": float(conf),  # Store as float for database compatibility
+        "prediction_display": f"{int(conf * 100)}%",  # Formatted version for UI
+        "hsv_percent": float(hsv_percent),
+        "lab_score": float(lab_score),
         "fuzzy_ripeness": float(fuzzy_score),
-        "hsv_score": hsv_p,
-        "lab_score": lab_s
+        "status": "Valid" if tomato_like else "Low Color Match"
     })
-    
-    # Color clustering for UI
-    img_rgb = np.array(pil_image.convert("RGB"))
-    res_colors = detect_multi_colors(img_rgb, k=4)
-    
+
+    # Color detection for visual representation
+    color_map = {"Red Tomato": "#FF0000", "Orange Tomato": "#FF7F00", "Yellow Tomato": "#FFFF00", "Green Tomato": "#00FF00", "Other": "#999999"}
+    res_colors = detect_multi_colors(img_rgb, k=4, color_map=color_map)
+
     return result, res_colors
+
 
 # -------------------------------------------------
 # STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
 # -------------------------------------------------
-st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
-
 background_base64 = get_base64_of_bin_file("background.jpg")
 logo_left_base64 = get_base64_of_bin_file("PUP Mulanay left.png")
 logo_right_base64 = get_base64_of_bin_file("PUP Mulanay right.png")
@@ -303,78 +341,6 @@ div.stButton > button {{
 """,
     unsafe_allow_html=True,
 )
-
-# -------------------------------------------------
-# 3.2. PREDICTION HELPER (Optimized for Variety-Aware Fuzzy Logic)
-# -------------------------------------------------
-def _get_model_input_size(model, fallback=(224, 224)):
-    try:
-        if hasattr(model, "inputs") and model.inputs:
-            ishape = model.inputs[0].shape
-            h = int(ishape[1]) if ishape[1] else None
-            w = int(ishape[2]) if ishape[2] else None
-            if h and w: return (h, w)
-        if hasattr(model, "input_shape") and model.input_shape:
-            ishape = model.input_shape
-            h = int(ishape[1]) if ishape[1] else None
-            w = int(ishape[2]) if ishape[2] else None
-            if h and w: return (h, w)
-    except: pass
-    return fallback
-
-def run_prediction(pil_image):
-    # STEP A: Identification (CNN Inference)
-    # Kailangan muna malaman ang variety bago ang kulay
-    img_rgb = np.array(pil_image.convert("RGB"))
-    preds_list = []
-    
-    # Suporta para sa multiple models (Ensemble)
-    for m in models:
-        h, w = _get_model_input_size(m)
-        img_clean = clean_image(pil_image, target_size=(h, w))
-        preds, indices, confs = get_prediction(m, img_clean)
-        preds_list.append(preds)
-
-    if not preds_list:
-        return None, None
-
-    avg_preds = np.mean(preds_list, axis=0)
-    idx = int(np.argmax(avg_preds))
-    conf = float(np.max(avg_preds))
-    detected_variety = idx_to_label.get(idx, "Unknown")
-
-    # STEP B: Variety-Aware Color Scoring
-    # Dito ipinapasa ang variety_label para mag-adjust ang logic sa Yellow o Red
-    hsv_percent, lab_score = compute_color_scores(pil_image, variety_label=detected_variety)
-    tomato_like = is_tomato_bouncer(pil_image)
-
-    # STEP C: Fuzzy Computation
-    try:
-        ripeness_sim.input['intensity'] = hsv_percent
-        # I-normalize ang lab_score kung 0-1 range siya
-        ripeness_sim.input['accuracy'] = lab_score * 100 if lab_score <= 1.0 else lab_score
-        ripeness_sim.compute()
-        fuzzy_score = ripeness_sim.output['ripeness']
-    except:
-        fuzzy_score = 0
-
-    # STEP D: Result Formatting
-    result = make_results(avg_preds, idx, conf, class_indices_path="class_indices.json")
-    result.update({
-        "variety_label": detected_variety,
-        "prediction": float(conf),  # Store as float for database compatibility
-        "prediction_display": f"{int(conf * 100)}%",  # Formatted version for UI
-        "hsv_percent": float(hsv_percent),
-        "lab_score": float(lab_score),
-        "fuzzy_ripeness": float(fuzzy_score),
-        "status": "Valid" if tomato_like else "Low Color Match"
-    })
-
-    # Color detection for visual representation
-    color_map = {"Red Tomato": "#FF0000", "Orange Tomato": "#FF7F00", "Yellow Tomato": "#FFFF00", "Green Tomato": "#00FF00", "Other": "#999999"}
-    res_colors = detect_multi_colors(img_rgb, k=4, color_map=color_map)
-
-    return result, res_colors
 
 # -------------------------------------------------
 # 4. VIDEO TRANSFORMER FOR LIVE CAMERA
