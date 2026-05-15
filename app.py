@@ -157,7 +157,7 @@ def convert_predictions_to_excel(predictions):
     return output.getvalue()
 
 # -------------------------------------------------
-# 3.1. VARIETY-AWARE PREDICTION LOGIC
+# 3. VARIETY-AWARE PREDICTION LOGIC
 # -------------------------------------------------
 def _get_model_input_size(model, fallback=(224, 224)):
     try:
@@ -230,7 +230,7 @@ def run_prediction(pil_image):
 
 
 # -------------------------------------------------
-# STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
+# 4. STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
 # -------------------------------------------------
 background_base64 = get_base64_of_bin_file("background.jpg")
 logo_left_base64 = get_base64_of_bin_file("PUP Mulanay left.png")
@@ -341,18 +341,6 @@ div.stButton > button {{
 """,
     unsafe_allow_html=True,
 )
-
-# -------------------------------------------------
-# 4. VIDEO TRANSFORMER FOR LIVE CAMERA
-# -------------------------------------------------
-class VideoTransformer(VideoProcessorBase): 
-    def __init__(self):
-        self.latest_frame = None
-    
-    def recv(self, frame: av.VideoFrame): # Dapat 'recv' ang name, hindi 'transform'
-        img = frame.to_ndarray(format="bgr24")
-        self.latest_frame = cv2.flip(img, 1)
-        return av.VideoFrame.from_ndarray(self.latest_frame, format="bgr24")
 
 # -------------------------------------------------
 # 5. UI LAYOUT & DISPLAY (STRICT FIX)
