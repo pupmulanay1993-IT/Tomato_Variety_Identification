@@ -155,41 +155,6 @@ def convert_predictions_to_excel(predictions):
     output.seek(0)
     return output.getvalue()
 
-# -------------------------------------------------
-# 3.1. VARIETY-AWARE PREDICTION LOGIC
-# -------------------------------------------------
-def run_prediction(pil_image):
-    # STEP A: Identification (CNN)
-    img_clean = clean_image(pil_image, target_size=(224, 224))
-    probs, idx, conf = get_prediction(model, img_clean)
-    variety_label = idx_to_label.get(idx, "Unknown")
-
-    # STEP B: Color Analysis (Variety-Aware)
-    hsv_p, lab_s = compute_color_scores(pil_image, variety_label=variety_label)
-
-    # STEP C: Fuzzy Logic Computation
-    ripeness_sim.input['intensity'] = np.clip(hsv_p, 0, 100)
-    ripeness_sim.input['accuracy'] = np.clip(lab_s * 100 if lab_s <= 1 else lab_s, 0, 100)
-    
-    try:
-        ripeness_sim.compute()
-        fuzzy_score = ripeness_sim.output['ripeness']
-    except:
-        fuzzy_score = 0
-
-    # STEP D: Format Final Results
-    result = make_results(probs, idx, conf, class_indices_path="class_indices.json")
-    result.update({
-        "fuzzy_ripeness": float(fuzzy_score),
-        "hsv_score": hsv_p,
-        "lab_score": lab_s
-    })
-    
-    # Color clustering for UI
-    img_rgb = np.array(pil_image.convert("RGB"))
-    res_colors = detect_multi_colors(img_rgb, k=4)
-    
-    return result, res_colors
 
 # -------------------------------------------------
 # STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
