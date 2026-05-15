@@ -1,4 +1,6 @@
-# Core Data & Logic
+streamlit>=1.31.0
+streamlit-webrtc>=0.47.1
+av>=10.0.0
 numpy==1.24.3
 scipy
 pandas
@@ -6,16 +8,7 @@ openpyxl
 networkx
 scikit-fuzzy
 scikit-learn
-
-# Computer Vision & ML
 tensorflow
 Pillow
-opencv-python-headless
-
-# Streamlit & Real-time Video
-streamlit>=1.30.0
-streamlit-webrtc>=0.47.0
-av>=10.0.0
-
-# Database
 supabase
+opencv-python-headless
