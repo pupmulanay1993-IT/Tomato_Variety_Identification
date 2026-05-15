@@ -12,7 +12,7 @@ import pandas as pd
 from supabase import create_client, Client
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 # Local utilities and functions
 from utils import (
     clean_image,
@@ -381,14 +381,16 @@ def run_prediction(pil_image):
 # -------------------------------------------------
 # 4. VIDEO TRANSFORMER FOR LIVE CAMERA
 # -------------------------------------------------
-class VideoTransformer(VideoTransformerBase):
+class VideoTransformer(VideoProcessorBase):
     def __init__(self):
         self.latest_frame = None
     
-    def transform(self, frame: av.VideoFrame):
+    def recv(self, frame: av.VideoFrame): # Pinalitan ang transform -> recv
         img = frame.to_ndarray(format="bgr24")
+        # I-store ang frame para sa processing
         self.latest_frame = cv2.flip(img, 1)
-        return self.latest_frame
+        # I-return ang frame para makita sa screen
+        return av.VideoFrame.from_ndarray(self.latest_frame, format="bgr24")
 
 # -------------------------------------------------
 # 5. UI LAYOUT & DISPLAY (STRICT FIX)
