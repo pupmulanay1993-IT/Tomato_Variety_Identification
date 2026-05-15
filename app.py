@@ -11,7 +11,6 @@ import pandas as pd
 from supabase import create_client, Client
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
-from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 # Local utilities and functions
 from utils import (
     clean_image,
