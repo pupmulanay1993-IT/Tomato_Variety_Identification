@@ -14,6 +14,9 @@ from skfuzzy import control as ctrl
 
 st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
 
+if "show_predictions" not in st.session_state:
+    st.session_state.show_predictions = False
+
 # Local utilities and functions
 from utils import (
     clean_image,
