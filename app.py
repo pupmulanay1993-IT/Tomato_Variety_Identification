@@ -1,4 +1,15 @@
 import streamlit as st
+import os
+
+# -------------------------------------------------
+# 1. PAGE CONFIG (DAPAT ITO ANG PINAKA-UNA AT SINGLETON!)
+# -------------------------------------------------
+st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
+
+# QUICK INITIALIZATION PARA HINDI MAG-HANG ANG STATE TRACKER
+if "show_predictions" not in st.session_state:
+    st.session_state.show_predictions = False
+
 from PIL import Image
 import io
 import numpy as np
@@ -12,32 +23,27 @@ from supabase import create_client, Client
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 
-st.set_page_config(page_title="Tomato Variety Identification", layout="wide", page_icon="favicon.png")
-
-if "show_predictions" not in st.session_state:
-    st.session_state.show_predictions = False
-
 # Local utilities and functions
-from utils import (
-    clean_image,
-    get_prediction,
-    make_results,
-    is_tomato_bouncer,
-    detect_multi_colors,
-    compute_color_scores,
-    adjust_shelf_life_for_ripeness,
-)
+try:
+    from utils import (
+        clean_image,
+        get_prediction,
+        make_results,
+        is_tomato_bouncer,
+        detect_multi_colors,
+        compute_color_scores,
+        adjust_shelf_life_for_ripeness,
+    )
+except Exception as e:
+    st.error(f"Error importing utils.py: {e}")
 
 # -------------------------------------------------
-# 1. ADAPTIVE FUZZY LOGIC ENGINE DEFINITION
+# 2. ADAPTIVE FUZZY LOGIC ENGINE DEFINITION
 # -------------------------------------------------
-# Antecedents (Inputs)
 intensity = ctrl.Antecedent(np.arange(0, 101, 1), 'intensity')
 accuracy = ctrl.Antecedent(np.arange(0, 101, 1), 'accuracy')
-# Consequent (Output)
 ripeness = ctrl.Consequent(np.arange(0, 101, 1), 'ripeness')
 
-# Membership Functions
 intensity.automf(3, names=['low', 'medium', 'high'])
 accuracy.automf(3, names=['poor', 'average', 'good'])
 
@@ -45,7 +51,6 @@ ripeness['unripe'] = fuzz.trimf(ripeness.universe, [0, 0, 45])
 ripeness['ripe'] = fuzz.trimf(ripeness.universe, [35, 65, 85])
 ripeness['overripe'] = fuzz.trimf(ripeness.universe, [75, 100, 100])
 
-# RULES: Strict logic for ripeness determination
 rule1 = ctrl.Rule(intensity['low'], ripeness['unripe'])
 rule2 = ctrl.Rule(accuracy['poor'], ripeness['unripe']) 
 rule3 = ctrl.Rule(intensity['medium'] & accuracy['good'], ripeness['ripe'])
@@ -56,89 +61,69 @@ ripeness_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
 ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
 
 # -------------------------------------------------
-# 2. PERFORMANCE CACHING & DB CONNECTION
+# 3. PERFORMANCE CACHING & DB CONNECTION
 # -------------------------------------------------
 @st.cache_resource
 def load_tomato_model():
-    """Loads the pre-trained (MobileNetV2) Keras model for tomato variety classification."""
     try:
-        return tf.keras.models.load_model("tomato_model.keras", compile=False)
+        if os.path.exists("tomato_model.keras"):
+            return tf.keras.models.load_model("tomato_model.keras", compile=False)
+        else:
+            st.error("tomato_model.keras file not found in repository!")
+            return None
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None
 
 @st.cache_resource
 def init_supabase() -> Client:
-    """Establishes a connection to the Supabase database using secrets."""
     try:
         return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    except:
+    except Exception as e:
         return None
 
 @st.cache_data
 def get_base64_of_bin_file(bin_file):
-    """Encodes a local binary file (like an image) to base64 for CSS/HTML injection."""
     try:
-        with open(bin_file, "rb") as f:
-            return base64.b64encode(f.read()).decode()
+        if os.path.exists(bin_file):
+            with open(bin_file, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+        return ""
     except:
         return ""
 
-# Initialize global instances
 supabase = init_supabase()
 model = load_tomato_model()
 models = [model] if model else []
 
-# Load Class Indices (Maps numeric model output to human-readable labels)
 try:
     with open("class_indices.json", "r") as f:
         class_mapping = json.load(f)
     idx_to_label = {int(v): k for k, v in class_mapping.items()}
 except:
-    # Fallback labels if the JSON mapping is missing
     idx_to_label = {0: "apollo_tomato", 1: "atlas_tomato", 2: "cherry_tomato", 3: "diamante_tomato", 
                     4: "kinalabasa_tomato", 5: "non_tomato", 6: "pear_tomato", 7: "rio_grande_tomato", 8: "roma_tomato"}
 
 def convert_to_serializable(obj):
-    """
-    Recursively converts NumPy types and other non-standard objects 
-    into standard Python types for JSON compatibility and database insertion.
-    """
-    if isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        return float(obj)
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, dict):
-        return {k: convert_to_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_serializable(i) for i in obj]
-    else:
-        return obj
+    if isinstance(obj, np.integer): return int(obj)
+    elif isinstance(obj, np.floating): return float(obj)
+    elif isinstance(obj, np.ndarray): return obj.tolist()
+    elif isinstance(obj, dict): return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list): return [convert_to_serializable(i) for i in obj]
+    return obj
 
 def fetch_all_predictions():
-    """Retrieves all historical classification records from the Supabase 'tomato_logs' table."""
-    if not supabase:
-        return None
+    if not supabase: return None
     try:
         response = supabase.table("tomato_logs").select("*").execute()
         return response.data if response.data else []
-    except Exception as e:
-        st.error(f"Failed to fetch predictions: {e}")
+    except:
         return None
 
 def convert_predictions_to_excel(predictions):
-    """
-    Processes raw database records into a flattened DataFrame and 
-    exports it as an Excel binary stream for user download.
-    """
-    if not predictions:
-        return None
-    
+    if not predictions: return None
     flattened_data = []
     for pred in predictions:
-        # Map DB columns to human-readable Excel headers
         row = {
             "ID": pred.get("id"),
             "Variety Label": pred.get("variety_label"),
@@ -151,7 +136,6 @@ def convert_predictions_to_excel(predictions):
             "Created At": pred.get("created_at")
         }
         flattened_data.append(row)
-    
     df = pd.DataFrame(flattened_data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -160,465 +144,201 @@ def convert_predictions_to_excel(predictions):
     return output.getvalue()
 
 # -------------------------------------------------
-# 3. VARIETY-AWARE PREDICTION LOGIC
+# 4. PREDICTION LOGIC (VARIETY-AWARE)
 # -------------------------------------------------
 def _get_model_input_size(model, fallback=(224, 224)):
     try:
         if hasattr(model, "inputs") and model.inputs:
             ishape = model.inputs[0].shape
-            h = int(ishape[1]) if ishape[1] else None
-            w = int(ishape[2]) if ishape[2] else None
-            if h and w: return (h, w)
-        if hasattr(model, "input_shape") and model.input_shape:
-            ishape = model.input_shape
-            h = int(ishape[1]) if ishape[1] else None
-            w = int(ishape[2]) if ishape[2] else None
+            h, w = int(ishape[1]), int(ishape[2])
             if h and w: return (h, w)
     except: pass
     return fallback
 
 def run_prediction(pil_image):
-    # STEP A: Identification (CNN Inference)
-    # Kailangan muna malaman ang variety bago ang kulay
     img_rgb = np.array(pil_image.convert("RGB"))
     preds_list = []
     
-    # Suporta para sa multiple models (Ensemble)
+    if not models:
+        st.error("No model loaded to perform prediction.")
+        return None, None
+
     for m in models:
         h, w = _get_model_input_size(m)
         img_clean = clean_image(pil_image, target_size=(h, w))
         preds, indices, confs = get_prediction(m, img_clean)
         preds_list.append(preds)
 
-    if not preds_list:
-        return None, None
-
     avg_preds = np.mean(preds_list, axis=0)
     idx = int(np.argmax(avg_preds))
     conf = float(np.max(avg_preds))
     detected_variety = idx_to_label.get(idx, "Unknown")
 
-    # STEP B: Variety-Aware Color Scoring
-    # Dito ipinapasa ang variety_label para mag-adjust ang logic sa Yellow o Red
     hsv_percent, lab_score = compute_color_scores(pil_image, variety_label=detected_variety)
     tomato_like = is_tomato_bouncer(pil_image)
 
-    # STEP C: Fuzzy Computation
     try:
         ripeness_sim.input['intensity'] = hsv_percent
-        # I-normalize ang lab_score kung 0-1 range siya
         ripeness_sim.input['accuracy'] = lab_score * 100 if lab_score <= 1.0 else lab_score
         ripeness_sim.compute()
         fuzzy_score = ripeness_sim.output['ripeness']
     except:
         fuzzy_score = 0
 
-    # STEP D: Result Formatting
     result = make_results(avg_preds, idx, conf, class_indices_path="class_indices.json")
     result.update({
         "variety_label": detected_variety,
-        "prediction": float(conf),  # Store as float for database compatibility
-        "prediction_display": f"{int(conf * 100)}%",  # Formatted version for UI
+        "prediction": float(conf),
+        "prediction_display": f"{int(conf * 100)}%",
         "hsv_percent": float(hsv_percent),
         "lab_score": float(lab_score),
         "fuzzy_ripeness": float(fuzzy_score),
         "status": "Valid" if tomato_like else "Low Color Match"
     })
 
-    # Color detection for visual representation
     color_map = {"Red Tomato": "#FF0000", "Orange Tomato": "#FF7F00", "Yellow Tomato": "#FFFF00", "Green Tomato": "#00FF00", "Other": "#999999"}
     res_colors = detect_multi_colors(img_rgb, k=4, color_map=color_map)
 
     return result, res_colors
 
-
 # -------------------------------------------------
-# 4. STYLING & HEADER (COMPLETE & MOBILE-OPTIMIZED)
+# 5. STYLING & HEADER (SAFE RENDERING)
 # -------------------------------------------------
 background_base64 = get_base64_of_bin_file("background.jpg")
 logo_left_base64 = get_base64_of_bin_file("PUP Mulanay left.png")
 logo_right_base64 = get_base64_of_bin_file("PUP Mulanay right.png")
 
-st.markdown(
-    f"""
+# optional lang if hindi mag appear agad ang background
+style_bg = f'url("data:image/jpg;base64,{background_base64}")' if background_base64 else '#121212'
+
+st.markdown(f"""
 <style>
-/* 1. BASE APP & BACKGROUND */
-.stApp {{
-    background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
-                      url("data:image/jpg;base64,{background_base64}");
-    background-size: cover;
-    background-position: center;
-    color: #FFFFFF !important;
+.stApp {{ 
+    background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), {style_bg}; 
+    background-size: cover; 
+    background-position: center; 
+    color: #FFFFFF !important; 
 }}
-
-/* 2. HEADER & LOGO STYLING (Pinagsamang Layout at Style) */
-.header-container {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0px;
-    margin-bottom: 30px;
-}}
-
-.logo-img {{
-    width: clamp(50px, 12vw, 80px); /* Slightly larger for better visibility */
-    height: auto;
-}}
-
-.header-text {{
-    font-size: clamp(1.5rem, 5vw, 2.5rem); 
-    font-weight: 800;
-    color: #FFD700 !important; /* Vivid Gold */
-    text-shadow: 2px 2px 4px #000000; 
-    text-align: center;
-    flex-grow: 1;
-    line-height: 1.2;
-}}
-
-/* 3. WIDGET VISIBILITY - Siniguro nating puti lahat ng labels */
-.stWidget label p {{
-    color: #FFFFFF !important;
-    font-size: 1.1rem !important;
-    font-weight: 700 !important;
-}}
-
-/* File Uploader - High Contrast (Para madaling makita) */
-[data-testid="stFileUploader"] {{
-    background-color: rgba(255, 255, 255, 0.95) !important;
-    padding: 20px;
-    border-radius: 15px;
-}}
-[data-testid="stFileUploader"] section {{
-    color: #000000 !important;
-}}
-
-/* 4. ALERT BOXES - Solid colors para sa readability */
-.stSuccess {{
-    background-color: rgba(28, 131, 22, 0.95) !important; 
-    border: 2px solid #ffffff;
-}}
-.stSuccess p {{ color: #FFFFFF !important; font-weight: bold !important; }}
-
-.stInfo {{
-    background-color: rgba(0, 104, 201, 0.9) !important; 
-    border: 1px solid #ffffff;
-}}
-.stInfo p {{ color: #FFFFFF !important; font-weight: bold !important; }}
-
-.stWarning {{
-    background-color: rgba(255, 75, 75, 0.9) !important; 
-    border: 1px solid #ffffff;
-}}
-.stWarning p {{ color: #FFFFFF !important; font-weight: bold !important; }}
-
-/* 5. METRICS & GENERAL TEXT */
-[data-testid="stMetricValue"] {{ 
-    color: #00FF00 !important; /* Neon green confidence score */
-    font-size: 3rem !important;
-    font-weight: 800 !important;
-    text-shadow: 2px 2px 5px #000000;
-}}
-[data-testid="stMetricLabel"] p {{
-    color: #FFFFFF !important;
-    font-size: 1.2rem !important;
-}}
-
-p, span, li, h1, h2, h3 {{
-    color: #FFFFFF !important;
-    font-weight: 500 !important;
-}}
-
-/* Button Styling */
-div.stButton > button {{
-    font-weight: bold !important;
-    text-transform: uppercase;
-    border-radius: 8px !important;
-}}
+.header-container {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 0px; margin-bottom: 30px; }}
+.logo-img {{ width: clamp(50px, 12vw, 80px); height: auto; }}
+.header-text {{ font-size: clamp(1.5rem, 5vw, 2.5rem); font-weight: 800; color: #FFD700 !important; text-shadow: 2px 2px 4px #000000; text-align: center; flex-grow: 1; }}
+p, span, li, h1, h2, h3, label {{ color: #FFFFFF !important; }}
 </style>
-
 <div class="header-container">
-    <img src="data:image/png;base64,{logo_left_base64}" class="logo-img">
+    {"<img src='data:image/png;base64," + logo_left_base64 + "' class='logo-img'>" if logo_left_base64 else "<div></div>"}
     <div class="header-text">Tomato Variety Identification</div>
-    <img src="data:image/png;base64,{logo_right_base64}" class="logo-img">
+    {"<img src='data:image/png;base64," + logo_right_base64 + "' class='logo-img'>" if logo_right_base64 else "<div></div>"}
 </div>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 # -------------------------------------------------
-# 5. UI LAYOUT & DISPLAY (STRICT FIX)
+# 6. UI MAIN LAYOUT
 # -------------------------------------------------
-res_variety = None
-res_colors = None
-
-# Gagamit tayo ng 2 columns na saktong 50/50 sa mobile
+res_variety, res_colors = None, None
 col_view, col_download = st.columns(2)
 
 with col_view:
-    # Stylized View All
-    st.markdown('<style>div[data-testid="column"]:nth-of-type(1) button { background-color: #FF6600 !important; color: white !important; height: 45px !important; }</style>', unsafe_allow_html=True)
-    if st.button("👁️ VIEW ALL", use_container_width=True, key="btn_view"):
+    if st.button("👁️ VIEW ALL", use_container_width=True): 
         st.session_state.show_predictions = True
-
 with col_download:
-    # Stylized Download
-    st.markdown('<style>div[data-testid="column"]:nth-of-type(2) button { background-color: #1E90FF !important; color: white !important; height: 45px !important; }</style>', unsafe_allow_html=True)
-    if st.button("📥 DOWNLOAD", use_container_width=True, key="btn_download"):
-        predictions = fetch_all_predictions()
-        if predictions:
-            excel_data = convert_predictions_to_excel(predictions)
-            if excel_data:
-                st.download_button("CONFIRM", excel_data, "tomato.xlsx", use_container_width=True)
+    if st.button("📥 DOWNLOAD", use_container_width=True):
+        preds = fetch_all_predictions()
+        if preds:
+            excel = convert_predictions_to_excel(preds)
+            if excel:
+                st.download_button("CONFIRM DOWNLOAD", excel, "tomato_records.xlsx", use_container_width=True)
+        else:
+            st.warning("No records to download or Database disconnected.")
 
 st.divider()
-
-# Ito ang main grid para sa results
 col1, col2, col3 = st.columns([1, 1, 1], gap="small")
 
 with col1:
     st.subheader("📷 Image Input")
-    option = st.radio("Choose Method:", ("Upload Image", "Live Camera Scan"), horizontal=True)
-
+    option = st.radio("Method:", ("Upload Image", "Live Camera Scan"), horizontal=True)
+    image_to_process = None
+    
     if option == "Upload Image":
-        uploaded_file = st.file_uploader("Drop tomato photo here", type=["jpg","png","jpeg"])
-        if uploaded_file:
-            image_to_process = Image.open(uploaded_file)
-            st.image(image_to_process, use_container_width=True, caption="Target Image")
-            
-            with st.spinner("🔍 AI is analyzing..."):
-                res_variety, res_colors = run_prediction(image_to_process)
-                res_variety["source"] = "Upload"
-                
-                # Auto-sync to Supabase
-                if supabase and res_variety.get("variety_label") != "Unknown":
-                    try:
-                        save_data = res_variety.copy()
-                        if "recommendation" in save_data and isinstance(save_data["recommendation"], dict):
-                            save_data["recommendation"] = json.dumps(save_data["recommendation"])
-                        
-                        # Siguraduhin ang unique ID
-                        save_data["id"] = str(uuid.uuid4())
-                        
-                        supabase.table("tomato_logs").insert([save_data]).execute()
-                        st.caption("✅ Saved to database.")
-                    except Exception as e:
-                        st.error(f"Sync failed: {e}")
-
+        uploaded_file = st.file_uploader("Drop photo", type=["jpg","png","jpeg"])
+        if uploaded_file: image_to_process = Image.open(uploaded_file)
     else:
-        # FAIL-SAFE CAMERA: Gamit ang st.camera_input
-        st.info("💡 Tip: Click 'Take Photo' to scan the tomato variety.")
-        
-        # Bubuksan nito ang native camera app ng cellphone mo
         camera_photo = st.camera_input("Scan Tomato")
+        if camera_photo: image_to_process = Image.open(camera_photo)
 
-        if camera_photo:
-            # I-convert ang photo para ma-process ng model
-            image_to_process = Image.open(camera_photo)
-            
-            # I-display ang litrato sa interface
-            st.image(image_to_process, use_container_width=True, caption="Captured Image")
-            
-            with st.spinner("🔍 Analyzing tomato variety..."):
+    if image_to_process:
+        st.image(image_to_process, use_container_width=True)
+        with st.spinner("🔍 Analyzing..."):
+            try:
                 res_variety, res_colors = run_prediction(image_to_process)
-                res_variety["source"] = "Live Scan"
-                
-                # Auto-sync to Supabase
-                if supabase and res_variety.get("variety_label") != "Unknown":
-                    try:
-                        save_data = res_variety.copy()
-                        if "recommendation" in save_data and isinstance(save_data["recommendation"], dict):
-                            save_data["recommendation"] = json.dumps(save_data["recommendation"])
-                        
-                        # Metadata/ID
-                        save_data["id"] = str(uuid.uuid4())
-                        
-                        supabase.table("tomato_logs").insert([save_data]).execute()
-                        st.success("✅ Analysis successful and saved to history!")
-                    except Exception as e:
-                        st.error(f"Sync failed: {e}")
-                        
+                if res_variety:
+                    res_variety["source"] = "Upload" if option == "Upload Image" else "Live Scan"
+            except Exception as e:
+                st.error(f"Analysis failed: {e}")
+
 with col2:
     st.subheader("📊 Processing")
     if res_variety:
         v_label = res_variety.get("variety_label", "Unknown")
-        v_name = v_label.replace("_"," ").title()
+        st.success(f"**Variety:** {v_label.replace('_',' ').title()}")
+        st.metric("AI Confidence", res_variety.get('prediction_display'))
         
-        # 1. Identification (Always shown)
-        st.success(f"**Variety:** {v_name}")
-        st.metric("AI Confidence", res_variety.get('prediction_display', f"{res_variety.get('prediction', 0):.1%}"))
-        
-        st.divider()
-        
-        # --- CONDITION: Show only if it's a real tomato ---
         if v_label != "non_tomato":
-            # Ripeness Gauge
             f_score = res_variety.get("fuzzy_ripeness", 0)
-            if f_score < 40:
-                rip_status, rip_color = "Unripe (Hilaw)", "green"
-            elif f_score < 75:
-                rip_status, rip_color = "Ripe (Hinog)", "orange"
-            else:
-                rip_status, rip_color = "Overripe (Lanta)", "red"
-                
-            st.markdown(f"**Ripeness Status:** :{rip_color}[{rip_status}]")
-            st.metric("Maturity Level", f"{f_score:.1f}%")
+            rip_status = "Unripe" if f_score < 40 else "Ripe" if f_score < 75 else "Overripe"
+            st.markdown(f"**Ripeness:** {rip_status}")
             st.progress(f_score / 100)
             
-            # Color Clusters
             if res_colors:
                 st.subheader("Dominant Pigments")
-                color_cols = st.columns(len(res_colors))
+                cols = st.columns(len(res_colors))
                 for i, (lbl, val) in enumerate(res_colors.items()):
-                    with color_cols[i]:
-                        st.markdown(f"""
-                        <div style="background-color: {val['color']}; height: 40px; border-radius: 8px; border: 2px solid white; display: flex; align-items: center; justify-content: center; margin: 5px 0;">
-                            <span style="color: white; font-weight: bold; font-size: 10px; text-shadow: 1px 1px 2px black;">
-                                {lbl.split()[0]}
-                            </span>
-                        </div>
-                        """, unsafe_allow_html=True)
-            
-            # Analysis Metrics Box
-            st.markdown("---")
-            hsv_val = res_variety.get('hsv_score', res_variety.get('hsv_percent', 0))
-            lab_val = res_variety.get('lab_score', 0)
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; border-left: 5px solid #FFD700;">
-                <h4 style="color: white; margin: 0; text-transform: uppercase; font-size: 14px;">📊 Analysis Metrics</h4>
-                <p style="color: #E0E0E0; margin: 5px 0; font-size: 11px;">
-                    <b>HSV Score:</b> {hsv_val:.1f}% | <b>Lab Score:</b> {lab_val:.3f}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.warning("⚠️ **Object Recognition**")
-            st.info("Ripeness and color metrics are disabled for non-tomato targets.")
+                    cols[i].markdown(f'<div style="background:{val["color"]};height:30px;border-radius:5px;border:1px solid white;"></div>', unsafe_allow_html=True)
+    else:
+        st.caption("Waiting for image input...")
 
 with col3:
     st.subheader("💡 Recommendations")
-    if res_variety:
-        v_label = res_variety.get("variety_label", "Unknown")
-        v_name = v_label.replace("_"," ").title()
+    if res_variety and res_variety.get("variety_label") != "non_tomato":
+        f_score = res_variety.get("fuzzy_ripeness", 0)
+        if f_score < 40: st.warning("🟢 Logistics: Best for shipping.")
+        elif f_score < 75: st.success("🟠 Market: Prime for retail.")
+        else: st.error("🔴 Urgent: Immediate processing needed.")
         
-        # --- CONDITION: Show tips only if it's a real tomato ---
-        if v_label != "non_tomato":
-            f_score = res_variety.get("fuzzy_ripeness", 0)
-            
-            # Maturity Insight
-            if f_score < 40:
-                st.warning("🟢 **Logistics:** High durability. Best for long-distance shipping.")
-            elif f_score < 75:
-                st.success("🟠 **Market:** Prime condition for retail and grocery sales.")
-            else:
-                st.error("🔴 **Urgent:** Short shelf-life. Immediate processing (sauce/paste) recommended.")
-            
-            # Detailed Info from utils.py
-            rec = res_variety.get("recommendation")
-            if isinstance(rec, dict):
-                st.markdown(f"### Characteristics")
-                st.caption(rec.get("description", "No description available."))
-                
-                st.markdown("### ⏳ Shelf Life Expectancy")
-                sl = rec.get("shelf_life", {})
-                adjusted_sl = adjust_shelf_life_for_ripeness(sl, f_score)
-
-                if f_score < 40:
-                    st.info("🟢 Unripe (Hilaw): longer shelf life expected compared to ripe tomato.")
-                elif f_score >= 75:
-                    st.warning("🔴 Overripe (Lanta): shorter shelf life expected; consume soon.")
-
-                st.markdown(f"""
-                    <div style="display:flex; gap:8px;">
-                        <div style="flex:1; background:#FFF3E0; padding:10px; border-radius:8px; text-align:center; border:1px solid #FFB74D; color: #000;">
-                            <small style="font-size: 10px;">🏠 Room Temp</small><br><b style="font-size:16px;">{adjusted_sl.get('room_temp_days', 0)} Days</b>
-                        </div>
-                        <div style="flex:1; background:#E3F2FD; padding:10px; border-radius:8px; text-align:center; border:1px solid #64B5F6; color: #000;">
-                            <small style="font-size: 10px;">❄️ Fridge</small><br><b style="font-size:16px;">{adjusted_sl.get('refrigerated_days', 0)} Days</b>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                # Climate Guidance
-                if "temperature_feasibility" in rec:
-                    tf = rec["temperature_feasibility"]
-                    st.info(f"🌡️ **Ideal Temp:** {tf['ideal_temp_c'][0]}°C - {tf['ideal_temp_c'][1]}°C")
-        else:
-            st.info("No agricultural recommendations available for this object.")
-# -------------------------------------------------
-# 6. SUPABASE SYNC
-# -------------------------------------------------
-# Check if the analysis result exists and is valid
-if res_variety and supabase and res_variety.get("variety_label") != "Unknown":
-    
-    # Extract the recommendation field
-    rec_data = res_variety.get("recommendation")
-    
-    # UI Button to prevent automatic/duplicate triggers
-    if st.button("Save Analysis to Database"):
-        
-        # VALIDATION: Block the insert if recommendation is missing/empty
-        if rec_data is None or str(rec_data).strip().lower() in ["none", "", "null"]:
-            st.error("Validation Failed: Recommendation is still empty. Please wait for the analysis to complete.")
-        else:
+        rec = res_variety.get("recommendation")
+        if isinstance(rec, dict):
+            st.caption(rec.get("description", ""))
             try:
-                # 1. Sanitize the prediction (Convert "89%" string to 0.89 float)
-                raw_pred = res_variety.get("prediction", 0)
-                if isinstance(raw_pred, str) and "%" in raw_pred:
-                    clean_pred = float(raw_pred.replace("%", "")) / 100.0
-                    display_pred = raw_pred
-                else:
-                    clean_pred = float(raw_pred)
-                    display_pred = f"{int(clean_pred * 100)}%"
+                sl = adjust_shelf_life_for_ripeness(rec.get("shelf_life", {}), f_score)
+                st.info(f"🏠 Room: {sl.get('room_temp_days')} days | ❄️ Fridge: {sl.get('refrigerated_days')} days")
+            except:
+                pass
+    else:
+        st.caption("Recommendations will appear here after analysis.")
 
-                # 2. Construct the final payload
-                # Using a manual UUID prevents duplicates if the button is clicked twice
-                payload = {
-                    "id": str(uuid.uuid4()), 
-                    "variety_label": res_variety.get("variety_label"),
-                    "prediction": clean_pred,
-                    "prediction_display": display_pred,
-                    "status": res_variety.get("status"),
-                    "hsv_percent": convert_to_serializable(res_variety.get("hsv_percent")),
-                    "lab_score": convert_to_serializable(res_variety.get("lab_score")),
-                    "recommendation": convert_to_serializable(rec_data), # Guaranteed to have content here
-                    "source": res_variety.get("source", "Upload"),
-                    "fuzzy_ripeness": convert_to_serializable(res_variety.get("fuzzy_ripeness"))
-                }
+# -------------------------------------------------
+# 7. SAVE TO DATABASE
+# -------------------------------------------------
+if res_variety and supabase and res_variety.get("variety_label") != "Unknown":
+    if st.button("Save Analysis to Database"):
+        try:
+            payload = {
+                "id": str(uuid.uuid4()), 
+                "variety_label": res_variety.get("variety_label"),
+                "prediction": res_variety.get("prediction"),
+                "status": res_variety.get("status"),
+                "hsv_percent": convert_to_serializable(res_variety.get("hsv_percent")),
+                "lab_score": convert_to_serializable(res_variety.get("lab_score")),
+                "recommendation": convert_to_serializable(res_variety.get("recommendation")),
+                "source": res_variety.get("source"),
+                "fuzzy_ripeness": convert_to_serializable(res_variety.get("fuzzy_ripeness"))
+            }
+            supabase.table("tomato_logs").insert(payload).execute()
+            st.success("✅ Saved successfully!")
+        except Exception as e: 
+            st.error(f"Database save error: {e}")
 
-                # 3. Execute the Supabase insert
-                supabase.table("tomato_logs").insert(payload).execute()
-                
-                st.success("✅ Record saved successfully with full recommendation data!")
-                
-            except Exception as e:
-                st.error(f"Database Error: {e}")
-# -------------------------------------------------
-# 7. DATABASE RECORDS VIEW
-# -------------------------------------------------
 if st.session_state.get("show_predictions"):
     st.divider()
-    st.header("📋 Historical Analysis Records")
-    
     logs = fetch_all_predictions()
-    if logs:
-        st.markdown(f"**Total Records: {len(logs)}**")
-        st.dataframe(
-            pd.DataFrame(logs), 
-            use_container_width=True,
-            height=500,
-            hide_index=True
-        )
-        
-        # Export button
-        if st.button("📥 Export Visible Data to Excel"):
-            excel_data = convert_predictions_to_excel(logs)
-            if excel_data:
-                st.download_button(
-                    label="Download as Excel",
-                    data=excel_data,
-                    file_name="tomato_records_export.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-    else:
-        st.info("📊 No analysis records found yet. Upload an image to start!") 
+    if logs: 
+        st.dataframe(pd.DataFrame(logs), use_container_width=True)
