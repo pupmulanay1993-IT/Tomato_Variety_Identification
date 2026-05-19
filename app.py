@@ -14,14 +14,10 @@ from PIL import Image
 import io
 import numpy as np
 import uuid
-import tensorflow as tf
-import cv2
 import base64
 import json
 import pandas as pd
 from supabase import create_client, Client
-import skfuzzy as fuzz
-from skfuzzy import control as ctrl
 
 # Local utilities and functions
 try:
