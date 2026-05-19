@@ -4,8 +4,6 @@ import numpy as np
 import cv2
 import skfuzzy as fuzz
 from sklearn.cluster import KMeans
-import tensorflow as tf
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 # -------------------------------------------------
 # COLOR INTELLIGENCE DATABASE
@@ -87,12 +85,11 @@ def adjust_shelf_life_for_ripeness(shelf_life, ripeness_score):
     elif ripeness_score >= 75:  # overripe/lanta
         room_days = max(1, room_days - 1)
         fridge_days = max(1, fridge_days - 2)
-    # else ripe/hinog -> baseline values
 
     return {"room_temp_days": room_days, "refrigerated_days": fridge_days}
 
 # -------------------------------------------------
-# IMAGE PREPROCESSING
+# IMAGE PREPROCESSING (MANUAL MOBILENETV2 FORMAT)
 # -------------------------------------------------
 def clean_image(image, target_size=(224, 224)):
     if isinstance(image, Image.Image):
@@ -107,8 +104,11 @@ def clean_image(image, target_size=(224, 224)):
     enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
     resized = cv2.resize(enhanced, target_size, interpolation=cv2.INTER_LANCZOS4)
-    img_expanded = np.expand_dims(resized, axis=0).astype(np.float32)
-    return preprocess_input(img_expanded)
+    
+    # Manu-manong ginaya ang tf.keras.applications.mobilenet_v2.preprocess_input
+    # Ipinapasok ang pixels sa range na [-1, 1] para tanggapin ng model mo
+    img_scaled = resized.astype(np.float32) / 127.5 - 1.0
+    return img_scaled
 
 # -------------------------------------------------
 # COLOR CLASSIFICATION
@@ -154,13 +154,31 @@ def detect_multi_colors(image_rgb, k=4, min_conf=0.3, color_map=None):
     return detected
 
 # -------------------------------------------------
-# MODEL PREDICTION
+# TFLITE MODEL PREDICTION (UPDATED!)
 # -------------------------------------------------
-def get_prediction(model, image_preprocessed):
-    preds = model.predict(image_preprocessed, verbose=0)
-    probs = preds[0]
+def get_prediction(interpreter, image_preprocessed):
+    """
+    Nag-eexecute ng prediction gamit ang TFLite Interpreter.
+    """
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+
+    # Magdagdag ng batch dimension: mula [224, 224, 3] magiging [1, 224, 224, 3]
+    input_data = np.expand_dims(image_preprocessed, axis=0).astype(np.float32)
+
+    # I-feed ang preprocessed image sa TFLite allocation tensor
+    interpreter.set_tensor(input_details[0]['index'], input_data)
+    
+    # Patakbuhin ang model calculator
+    interpreter.invoke()
+
+    # Kunin ang output predictions (array of probabilities)
+    probs = interpreter.get_tensor(output_details[0]['index'])[0]
+    
     idx = int(np.argmax(probs))
     conf = float(np.max(probs))
+    
+    # Ipinapasa pabalik ang buong list ng probabilities para magamit ng make_results
     return probs, idx, conf
 
 # -------------------------------------------------
@@ -178,6 +196,8 @@ def make_results(avg_preds, indices, confs, class_indices_path="class_indices.js
             6: "pear_tomato", 7: "rio_grande_tomato", 8: "roma_tomato"
         }
 
+    class_name = class_labels.get(indices, "Unknown")
+    
     recs = {
         "apollo_tomato": {
             "description": "Hybrid variety known for high yield and heat tolerance. Oval-round fruit.",
@@ -201,7 +221,7 @@ def make_results(avg_preds, indices, confs, class_indices_path="class_indices.js
             "description": "Highly resistant to pests and diseases, firm fruit quality.",
             "plant_lifespan": "Annual",
             "shelf_life": {"room_temp_days": 3, "refrigerated_days": 9},
-            "temperature_feasibility": {"ideal_temp_c": [22, 32], "feasibility_note": "Excellent heat tolerance."}
+            "temperature_feasibility": {"ideal_temp_c": [22, 32], "excellent heat tolerance.": "Excellent heat tolerance."}
         },
         "kinalabasa_tomato": {
             "description": "Traditional Filipino variety with a flat, ribbed shape (pumpkin-like).",
@@ -235,7 +255,6 @@ def make_results(avg_preds, indices, confs, class_indices_path="class_indices.js
         }
     }
 
-    class_name = class_labels.get(indices, "Unknown")
     recommendation_data = recs.get(class_name, {"description": "Details coming soon."})
 
     return {
