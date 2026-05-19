@@ -66,9 +66,8 @@ def get_base64_of_bin_file(bin_file):
     except:
         return ""
 
+# Tanging magagaang initializers lang ang maiiwan dito sa global scope
 supabase = init_supabase()
-model = load_tomato_model()
-models = [model] if model else []
 
 try:
     with open("class_indices.json", "r") as f:
@@ -130,26 +129,23 @@ def _get_model_input_size(model, fallback=(224, 224)):
     return fallback
 
 def run_prediction(pil_image):
-    # LAZY IMPORT SA LOOB NG EXECUTION SCOPE
+    # LAZY IMPORT AT LAZY MODEL LOADING (Dito lang tatawagin kapag kailangan na)
     import skfuzzy as fuzz
     from skfuzzy import control as ctrl
-
-    img_rgb = np.array(pil_image.convert("RGB"))
-    preds_list = []
     
-    if not models:
+    loaded_model = load_tomato_model()
+    if not loaded_model:
         st.error("No model loaded to perform prediction.")
         return None, None
 
-    for m in models:
-        h, w = _get_model_input_size(m)
-        img_clean = clean_image(pil_image, target_size=(h, w))
-        preds, indices, confs = get_prediction(m, img_clean)
-        preds_list.append(preds)
+    img_rgb = np.array(pil_image.convert("RGB"))
+    
+    h, w = _get_model_input_size(loaded_model)
+    img_clean = clean_image(pil_image, target_size=(h, w))
+    preds, indices, confs = get_prediction(loaded_model, img_clean)
 
-    avg_preds = np.mean(preds_list, axis=0)
-    idx = int(np.argmax(avg_preds))
-    conf = float(np.max(avg_preds))
+    idx = int(np.argmax(preds))
+    conf = float(np.max(preds))
     detected_variety = idx_to_label.get(idx, "Unknown")
 
     hsv_percent, lab_score = compute_color_scores(pil_image, variety_label=detected_variety)
@@ -184,7 +180,7 @@ def run_prediction(pil_image):
     except Exception as e:
         fuzzy_score = 0
 
-    result = make_results(avg_preds, idx, conf, class_indices_path="class_indices.json")
+    result = make_results(preds, idx, conf, class_indices_path="class_indices.json")
     result.update({
         "variety_label": detected_variety,
         "prediction": float(conf),
@@ -300,7 +296,7 @@ with col3:
         f_score = res_variety.get("fuzzy_ripeness", 0)
         if f_score < 40: st.warning("🟢 Logistics: Best for shipping.")
         elif f_score < 75: st.success("🟠 Market: Prime for retail.")
-        else: text_color = st.error("🔴 Urgent: Immediate processing needed.")
+        else: st.error("🔴 Urgent: Immediate processing needed.")
         
         rec = res_variety.get("recommendation")
         if isinstance(rec, dict):
