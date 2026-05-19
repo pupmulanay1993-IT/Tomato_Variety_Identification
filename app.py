@@ -34,33 +34,11 @@ except Exception as e:
     st.error(f"Error importing utils.py: {e}")
 
 # -------------------------------------------------
-# 2. ADAPTIVE FUZZY LOGIC ENGINE DEFINITION
-# -------------------------------------------------
-intensity = ctrl.Antecedent(np.arange(0, 101, 1), 'intensity')
-accuracy = ctrl.Antecedent(np.arange(0, 101, 1), 'accuracy')
-ripeness = ctrl.Consequent(np.arange(0, 101, 1), 'ripeness')
-
-intensity.automf(3, names=['low', 'medium', 'high'])
-accuracy.automf(3, names=['poor', 'average', 'good'])
-
-ripeness['unripe'] = fuzz.trimf(ripeness.universe, [0, 0, 45])
-ripeness['ripe'] = fuzz.trimf(ripeness.universe, [35, 65, 85])
-ripeness['overripe'] = fuzz.trimf(ripeness.universe, [75, 100, 100])
-
-rule1 = ctrl.Rule(intensity['low'], ripeness['unripe'])
-rule2 = ctrl.Rule(accuracy['poor'], ripeness['unripe']) 
-rule3 = ctrl.Rule(intensity['medium'] & accuracy['good'], ripeness['ripe'])
-rule4 = ctrl.Rule(intensity['high'] & accuracy['good'], ripeness['ripe'])
-rule5 = ctrl.Rule(intensity['high'] & accuracy['average'], ripeness['overripe'])
-
-ripeness_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
-ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
-
-# -------------------------------------------------
-# 3. PERFORMANCE CACHING & DB CONNECTION
+# 2. PERFORMANCE CACHING & DB CONNECTION
 # -------------------------------------------------
 @st.cache_resource
 def load_tomato_model():
+    import tensorflow as tf
     try:
         if os.path.exists("tomato_model.keras"):
             return tf.keras.models.load_model("tomato_model.keras", compile=False)
@@ -140,7 +118,7 @@ def convert_predictions_to_excel(predictions):
     return output.getvalue()
 
 # -------------------------------------------------
-# 4. PREDICTION LOGIC (VARIETY-AWARE)
+# 3. PREDICTION & FUZZY SYSTEM FUNCTION
 # -------------------------------------------------
 def _get_model_input_size(model, fallback=(224, 224)):
     try:
@@ -152,6 +130,10 @@ def _get_model_input_size(model, fallback=(224, 224)):
     return fallback
 
 def run_prediction(pil_image):
+    # LAZY IMPORT SA LOOB NG EXECUTION SCOPE
+    import skfuzzy as fuzz
+    from skfuzzy import control as ctrl
+
     img_rgb = np.array(pil_image.convert("RGB"))
     preds_list = []
     
@@ -173,12 +155,33 @@ def run_prediction(pil_image):
     hsv_percent, lab_score = compute_color_scores(pil_image, variety_label=detected_variety)
     tomato_like = is_tomato_bouncer(pil_image)
 
+    # SECURED LOCAL FUZZY LOGIC COMPUTATION
     try:
+        intensity = ctrl.Antecedent(np.arange(0, 101, 1), 'intensity')
+        accuracy = ctrl.Antecedent(np.arange(0, 101, 1), 'accuracy')
+        ripeness = ctrl.Consequent(np.arange(0, 101, 1), 'ripeness')
+
+        intensity.automf(3, names=['low', 'medium', 'high'])
+        accuracy.automf(3, names=['poor', 'average', 'good'])
+
+        ripeness['unripe'] = fuzz.trimf(ripeness.universe, [0, 0, 45])
+        ripeness['ripe'] = fuzz.trimf(ripeness.universe, [35, 65, 85])
+        ripeness['overripe'] = fuzz.trimf(ripeness.universe, [75, 100, 100])
+
+        rule1 = ctrl.Rule(intensity['low'], ripeness['unripe'])
+        rule2 = ctrl.Rule(accuracy['poor'], ripeness['unripe']) 
+        rule3 = ctrl.Rule(intensity['medium'] & accuracy['good'], ripeness['ripe'])
+        rule4 = ctrl.Rule(intensity['high'] & accuracy['good'], ripeness['ripe'])
+        rule5 = ctrl.Rule(intensity['high'] & accuracy['average'], ripeness['overripe'])
+
+        ripeness_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5])
+        ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
+
         ripeness_sim.input['intensity'] = hsv_percent
         ripeness_sim.input['accuracy'] = lab_score * 100 if lab_score <= 1.0 else lab_score
         ripeness_sim.compute()
         fuzzy_score = ripeness_sim.output['ripeness']
-    except:
+    except Exception as e:
         fuzzy_score = 0
 
     result = make_results(avg_preds, idx, conf, class_indices_path="class_indices.json")
@@ -198,13 +201,12 @@ def run_prediction(pil_image):
     return result, res_colors
 
 # -------------------------------------------------
-# 5. STYLING & HEADER (SAFE RENDERING)
+# 4. STYLING & HEADER (SAFE RENDERING)
 # -------------------------------------------------
 background_base64 = get_base64_of_bin_file("background.jpg")
 logo_left_base64 = get_base64_of_bin_file("PUP Mulanay left.png")
 logo_right_base64 = get_base64_of_bin_file("PUP Mulanay right.png")
 
-# optional lang if hindi mag appear agad ang background
 style_bg = f'url("data:image/jpg;base64,{background_base64}")' if background_base64 else '#121212'
 
 st.markdown(f"""
@@ -228,7 +230,7 @@ p, span, li, h1, h2, h3, label {{ color: #FFFFFF !important; }}
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------
-# 6. UI MAIN LAYOUT
+# 5. UI MAIN LAYOUT
 # -------------------------------------------------
 res_variety, res_colors = None, None
 col_view, col_download = st.columns(2)
@@ -298,7 +300,7 @@ with col3:
         f_score = res_variety.get("fuzzy_ripeness", 0)
         if f_score < 40: st.warning("🟢 Logistics: Best for shipping.")
         elif f_score < 75: st.success("🟠 Market: Prime for retail.")
-        else: st.error("🔴 Urgent: Immediate processing needed.")
+        else: text_color = st.error("🔴 Urgent: Immediate processing needed.")
         
         rec = res_variety.get("recommendation")
         if isinstance(rec, dict):
@@ -312,7 +314,7 @@ with col3:
         st.caption("Recommendations will appear here after analysis.")
 
 # -------------------------------------------------
-# 7. SAVE TO DATABASE
+# 6. SAVE TO DATABASE
 # -------------------------------------------------
 if res_variety and supabase and res_variety.get("variety_label") != "Unknown":
     if st.button("Save Analysis to Database"):
