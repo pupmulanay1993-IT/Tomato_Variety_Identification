@@ -19,6 +19,9 @@ import json
 import pandas as pd
 from supabase import create_client, Client
 
+# BAGONG LIBRARY PARA SA TFLITE (MAGAAN AT MABILIS)
+import tflite_runtime.interpreter as tflite
+
 # Local utilities and functions
 try:
     from utils import (
@@ -38,15 +41,21 @@ except Exception as e:
 # -------------------------------------------------
 @st.cache_resource
 def load_tomato_model():
-    import tensorflow as tf
+    """
+    Iniloload ang TFLite Model gamit ang tflite_runtime interpreter.
+    Sobrang tipid nito sa RAM kumpara sa buong TensorFlow library.
+    """
     try:
-        if os.path.exists("tomato_model.keras"):
-            return tf.keras.models.load_model("tomato_model.keras", compile=False)
+        if os.path.exists("tomato_model.tflite"):
+            # Gumawa ng interpreter instance para sa .tflite file
+            interpreter = tflite.Interpreter(model_path="tomato_model.tflite")
+            interpreter.allocate_tensors()
+            return interpreter
         else:
-            st.error("tomato_model.keras file not found in repository!")
+            st.error("tomato_model.tflite file not found in repository!")
             return None
     except Exception as e:
-        st.error(f"Error loading model: {e}")
+        st.error(f"Error loading TFLite model: {e}")
         return None
 
 @st.cache_resource
@@ -119,30 +128,38 @@ def convert_predictions_to_excel(predictions):
 # -------------------------------------------------
 # 3. PREDICTION & FUZZY SYSTEM FUNCTION
 # -------------------------------------------------
-def _get_model_input_size(model, fallback=(224, 224)):
+def _get_model_input_size(interpreter, fallback=(224, 224)):
+    """
+    Kumukuha ng input dimensions (height, width) mula sa TFLite interpreter details.
+    """
     try:
-        if hasattr(model, "inputs") and model.inputs:
-            ishape = model.inputs[0].shape
-            h, w = int(ishape[1]), int(ishape[2])
-            if h and w: return (h, w)
+        input_details = interpreter.get_input_details()
+        input_shape = input_details[0]['shape'] # Format: [Batch, Height, Width, Channels]
+        h, w = int(input_shape[1]), int(input_shape[2])
+        if h and w: return (h, w)
     except: pass
     return fallback
 
 def run_prediction(pil_image):
-    # LAZY IMPORT AT LAZY MODEL LOADING (Dito lang tatawagin kapag kailangan na)
+    # LAZY IMPORT AT LAZY MODEL LOADING
     import skfuzzy as fuzz
     from skfuzzy import control as ctrl
     
-    loaded_model = load_tomato_model()
-    if not loaded_model:
-        st.error("No model loaded to perform prediction.")
+    interpreter = load_tomato_model()
+    if not interpreter:
+        st.error("No TFLite model loaded to perform prediction.")
         return None, None
 
     img_rgb = np.array(pil_image.convert("RGB"))
     
-    h, w = _get_model_input_size(loaded_model)
+    # Kunin ang tamang sukat (halimbawa: 224x224) base sa TFLite interpreter
+    h, w = _get_model_input_size(interpreter)
     img_clean = clean_image(pil_image, target_size=(h, w))
-    preds, indices, confs = get_prediction(loaded_model, img_clean)
+    
+    # UPDATE: Dahil utils.py ay baka umaasa pa sa lumang Keras format, 
+    # ipinapasa natin ang interpreter sa get_prediction function mo.
+    # Tiyakin na ang utils.py mo ay updated din para mag-invoke via interpreter.
+    preds, indices, confs = get_prediction(interpreter, img_clean)
 
     idx = int(np.argmax(preds))
     conf = float(np.max(preds))
