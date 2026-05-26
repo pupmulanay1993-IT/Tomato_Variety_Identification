@@ -4,8 +4,6 @@ import numpy as np
 import cv2
 import skfuzzy as fuzz
 from sklearn.cluster import KMeans
-import tensorflow as tf
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 # -------------------------------------------------
 # COLOR INTELLIGENCE DATABASE
@@ -70,11 +68,6 @@ def is_tomato_bouncer(image, min_tomato_percent=5):
 # SHELF LIFE ADJUSTMENT (Ripeness-aware)
 # -------------------------------------------------
 def adjust_shelf_life_for_ripeness(shelf_life, ripeness_score):
-    """Adjust shelf-life days by ripeness:
-    - Hilaw (green): longer longevity
-    - Hinog (orange/yellow): baseline
-    - Overripe (red): shorter longevity
-    """
     if not shelf_life or not isinstance(shelf_life, dict):
         return shelf_life
 
@@ -87,12 +80,11 @@ def adjust_shelf_life_for_ripeness(shelf_life, ripeness_score):
     elif ripeness_score >= 75:  # overripe/lanta
         room_days = max(1, room_days - 1)
         fridge_days = max(1, fridge_days - 2)
-    # else ripe/hinog -> baseline values
 
     return {"room_temp_days": room_days, "refrigerated_days": fridge_days}
 
 # -------------------------------------------------
-# IMAGE PREPROCESSING
+# IMAGE PREPROCESSING (FRAMEWORK AGNOSTIC)
 # -------------------------------------------------
 def clean_image(image, target_size=(224, 224)):
     if isinstance(image, Image.Image):
@@ -100,15 +92,20 @@ def clean_image(image, target_size=(224, 224)):
     else:
         image_np = np.array(image)
 
+    # 1. Image Enhancement & Denoising
     denoised = cv2.fastNlMeansDenoisingColored(image_np, None, 5, 5, 7, 21)
     lab = cv2.cvtColor(denoised, cv2.COLOR_RGB2LAB)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     lab[:, :, 0] = clahe.apply(lab[:, :, 0])
     enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
 
+    # 2. Resizing
     resized = cv2.resize(enhanced, target_size, interpolation=cv2.INTER_LANCZOS4)
     img_expanded = np.expand_dims(resized, axis=0).astype(np.float32)
-    return preprocess_input(img_expanded)
+    
+    # 3. FIXED: Native NumPy implementation of MobileNetV2 preprocessing
+    # This matches formula: (x / 127.5) - 1.0 without loading heavy Keras packages
+    return (img_expanded / 127.5) - 1.0
 
 # -------------------------------------------------
 # COLOR CLASSIFICATION
@@ -130,7 +127,7 @@ def classify_hsv_color(hsv_color, color_map):
     return "Other", s / 255.0, color_map.get("Other", "#999999")
 
 # -------------------------------------------------
-# MULTI COLOR DETECTION (FIXED)
+# MULTI COLOR DETECTION
 # -------------------------------------------------
 def detect_multi_colors(image_rgb, k=4, min_conf=0.3, color_map=None):
     if color_map is None:
@@ -154,11 +151,23 @@ def detect_multi_colors(image_rgb, k=4, min_conf=0.3, color_map=None):
     return detected
 
 # -------------------------------------------------
-# MODEL PREDICTION
+# MODEL PREDICTION (COMPATIBLE WITH TFLITE INTERPRETER)
 # -------------------------------------------------
 def get_prediction(model, image_preprocessed):
-    preds = model.predict(image_preprocessed, verbose=0)
-    probs = preds[0]
+    # Check if this is a TFLite Interpreter instance or full Keras model
+    if hasattr(model, "get_input_details"):
+        input_details = model.get_input_details()
+        output_details = model.get_output_details()
+        
+        model.set_tensor(input_details[0]['index'], image_preprocessed)
+        model.invoke()
+        
+        probs = model.get_tensor(output_details[0]['index'])[0]
+    else:
+        # Fallback if using full heavy tensorflow model framework object
+        preds = model.predict(image_preprocessed, verbose=0)
+        probs = preds[0]
+        
     idx = int(np.argmax(probs))
     conf = float(np.max(probs))
     return probs, idx, conf
@@ -183,49 +192,49 @@ def make_results(avg_preds, indices, confs, class_indices_path="class_indices.js
             "description": "Early-fruiting, vigorous Australian hybrid. Produces large, fleshy, low-acid round red fruits up to 300g.",
             "plant_lifespan": "Indeterminate: 6–8 months. Fruits continuously over several months.",
             "shelf_life": {"room_temp_days": 3, "refrigerated_days": 9},
-            "temperature_feasibility": {"ideal_temp_c": [20, 30], "feasibility_note": "Mild & Moderate Climates: Thrives in traditional Mediterranean or spring/summer conditions. Struggles significantly under harsh tropical heat waves."}
+            "temperature_feasibility": {"ideal_temp_c": [20, 30], "feasibility_note": "Mild & Moderate Climates: Thrives in traditional Mediterranean or summer conditions."}
         },
         "atlas_tomato": {
             "description": "Tropical F1 hybrid widely grown in the Philippines. Highly resistant to Tomato Yellow Leaf Curl Virus (TYLCV). Produces large, oval, orange-red fruits.",
             "plant_lifespan": "Semi-Determinate: 5–7 months. Features an extended, prolonged harvesting life.",
             "shelf_life": {"room_temp_days": 4, "refrigerated_days": 10},
-            "temperature_feasibility": {"ideal_temp_c": [18, 30], "feasibility_note": "Hot & Humid Lowlands: Specifically bred for tropical environments. It handles high night temperatures remarkably well without dropping its blossoms."}
+            "temperature_feasibility": {"ideal_temp_c": [18, 30], "feasibility_note": "Hot & Humid Lowlands: Specifically bred for tropical environments."}
         },
         "cherry_tomato": {
             "description": "Grouping of small, bite-sized round tomatoes. Highly prolific, intensely sweet, and juicy.",
             "plant_lifespan": "Indeterminate (mostly): 6–8 months. Produces until cold weather hits.",
             "shelf_life": {"room_temp_days": 5, "refrigerated_days": 12},
-            "temperature_feasibility": {"ideal_temp_c": [18, 28], "feasibility_note": "Broadly Adaptable: Because the fruits are small, they require less energy to mature, allowing them to successfully set fruit even when temperatures fluctuate outside the ideal zone."}
+            "temperature_feasibility": {"ideal_temp_c": [18, 28], "feasibility_note": "Broadly Adaptable: Small fruits require less energy to mature successfully."}
         },
         "diamante_tomato": {
             "description": "Blockbuster East-West Seed F1 hybrid in Southeast Asia. Deep red, square-round, heavy fruits. Famous for wet-season adaptability.",
             "plant_lifespan": "Determinate: 4–5 months. Short, compact bush that yields a massive, concentrated harvest.",
             "shelf_life": {"room_temp_days": 3, "refrigerated_days": 9},
-            "temperature_feasibility": {"ideal_temp_c": [22, 32], "feasibility_note": "Hot, Wet, & Tropical: A powerhouse for tropical farming. It is highly resistant to 'blossom drop' caused by oppressive, humid summer nights."}
+            "temperature_feasibility": {"ideal_temp_c": [22, 32], "feasibility_note": "Hot, Wet, & Tropical: Powerhouse variant optimized for tropical farming."}
         },
         "kinalabasa_tomato": {
             "description": "Rare Philippine heirloom named for its unique, deeply ribbed/ruffled shape resembling a pumpkin (kalabasa). Juicy, well-balanced flavor.",
             "plant_lifespan": "Indeterminate: 5–7 months. Traditional vine that continues fruiting under good care.",
             "shelf_life": {"room_temp_days": 3, "refrigerated_days": 10},
-            "temperature_feasibility": {"ideal_temp_c": [20, 32], "feasibility_note": "Native Tropical Humid: As a traditional Philippine heirloom, it is naturally adapted to consistent warmth and high humidity, though it prefers partial afternoon shade during peak summer heat."}
+            "temperature_feasibility": {"ideal_temp_c": [20, 32], "feasibility_note": "Native Tropical Humid: Adapted to consistent warmth and humidity."}
         },
         "pear_tomato": {
             "description": "Small, teardrop-shaped heirloom variety (usually yellow or red). Mildly sweet, low-seed count, crisp texture.",
             "plant_lifespan": "Indeterminate: 6–8 months. Vigorous vines requiring tall staking.",
             "shelf_life": {"room_temp_days": 5, "refrigerated_days": 12},
-            "temperature_feasibility": {"ideal_temp_c": [20, 30], "feasibility_note": "Cooler to Warm Temperate: Prefers steady, moderate summer warmth. Extreme heat waves (above 33°C) cause the plant to focus on survival rather than fruiting."}
+            "temperature_feasibility": {"ideal_temp_c": [20, 30], "feasibility_note": "Cooler to Warm Temperate: Prefers steady, moderate summer warmth."}
         },
         "rio_grande_tomato": {
             "description": "Heavily productive open-pollinated plum variety. Large, blocky pear-shaped fruits ideal for processing, pastes, and sauces.",
             "plant_lifespan": "Determinate: 4–5 months. Compact bush that concentrates its yield efficiently.",
             "shelf_life": {"room_temp_days": 4, "refrigerated_days": 10},
-            "temperature_feasibility": {"ideal_temp_c": [18, 28], "feasibility_note": "Highly Adaptable / Dry Heat: Outstanding performance in regions with hot days and cool nights. Its robust nature lets it handle dry heat exceptionally well."}
+            "temperature_feasibility": {"ideal_temp_c": [18, 28], "feasibility_note": "Highly Adaptable / Dry Heat: Outstanding performance with dry heat parameters."}
         },
         "roma_tomato": {
             "description": "The classic Italian plum tomato. Slender, firm, oblong fruit with low moisture and few seeds—the gold standard for canning and cooking.",
-            "plant_lifespan": "Determinate: 4–5 months. Compact 'bush' structure that sets its crop over a short window.",
+            "plant_lifespan": "Determinate: 4–5 months. Compact 'bush' structure.",
             "shelf_life": {"room_temp_days": 4, "refrigerated_days": 11},
-            "temperature_feasibility": {"ideal_temp_c": [18, 30], "feasibility_note": "Warm & Dry (Arid): Thrives in warm, open sunshine with low humidity. High temperatures combined with stagnant, humid air make it highly susceptible to fungal issues like early blight."}
+            "temperature_feasibility": {"ideal_temp_c": [18, 30], "feasibility_note": "Warm & Dry (Arid): Thrives in warm, open sunshine with lower relative humidity limits."}
         },
         "non_tomato": {
             "description": "The image provided does not look like a valid tomato variety.",
@@ -238,9 +247,10 @@ def make_results(avg_preds, indices, confs, class_indices_path="class_indices.js
     class_name = class_labels.get(indices, "Unknown")
     recommendation_data = recs.get(class_name, {"description": "Details coming soon."})
 
+    # FIXED: Return prediction as a raw float rather than formatted string to prevent Supabase type casting errors in app.py
     return {
         "status": f"Detected: {class_name.replace('_', ' ').title()}",
         "variety_label": class_name,
-        "prediction": f"{int(confs * 100)}%",
+        "prediction": float(confs),
         "recommendation": recommendation_data
     }
