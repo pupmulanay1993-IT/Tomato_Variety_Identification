@@ -1,9 +1,8 @@
 streamlit==1.31.0
 rich<15.0.0
 numpy==1.24.3
-scikit-fuzzy
+scikit-fuzzy==0.4.2
 scikit-learn
-tensorflow
 Pillow
 supabase
 opencv-python-headless
@@ -11,4 +10,4 @@ pandas
 openpyxl
 scipy
 networkx
-tflite-runtime
+tflite-runtime==2.14.0
