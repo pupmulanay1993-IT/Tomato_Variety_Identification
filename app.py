@@ -28,6 +28,7 @@ import pandas as pd
 from supabase import create_client, Client
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
+import tflite_runtime.interpreter as tflite
 
 # Local utilities and functions
 try:
@@ -72,29 +73,19 @@ ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
 @st.cache_resource
 def load_tomato_model():
     """
-    Iniloload ang TFLite Model gamit ang tflite_runtime/tensorflow interpreter safely.
+    para mabilis mag load ang model ng walang error
     """
     model_path = "tomato_model.tflite"
     if not os.path.exists(model_path):
         st.error("tomato_model.tflite file not found in repository!")
         return None
-        
     try:
-        # Una, subukang i-load gamit ang standalone light tflite-runtime (Tamang-tama sa cloud hosting)
-        import tflite_runtime.interpreter as tflite
         interpreter = tflite.Interpreter(model_path=model_path)
         interpreter.allocate_tensors()
         return interpreter
-    except ImportError:
-        try:
-            # Fallback kapag full heavy TensorFlow engine ang nakainstall local
-            import tensorflow as tf
-            interpreter = tf.lite.Interpreter(model_path=model_path)
-            interpreter.allocate_tensors()
-            return interpreter
-        except Exception as e:
-            st.error(f"Error loading TFLite model: {e}")
-            return None
+    except Exception as e:
+        st.error(f"Error loading TFLite model: {e}")
+        return None
 
 @st.cache_resource
 def init_supabase() -> Client:
