@@ -18,9 +18,6 @@ from PIL import Image
 import io
 import numpy as np
 import uuid
-import tensorflow as tf
-# FIXED: Explicitly import tflite from tensorflow to resolve NameError
-from tensorflow import lite as tflite 
 import cv2
 import base64
 import json
@@ -72,21 +69,29 @@ ripeness_sim = ctrl.ControlSystemSimulation(ripeness_ctrl)
 @st.cache_resource
 def load_tomato_model():
     """
-    Iniloload ang TFLite Model gamit ang tflite_runtime interpreter.
-    Sobrang tipid nito sa RAM kumpara sa buong TensorFlow library.
+    Iniloload ang TFLite Model gamit ang tflite_runtime/tensorflow interpreter safely.
     """
+    model_path = "tomato_model.tflite"
+    if not os.path.exists(model_path):
+        st.error("tomato_model.tflite file not found in repository!")
+        return None
+        
     try:
-        if os.path.exists("tomato_model.tflite"):
-            # Fixed via earlier definition assignment
-            interpreter = tflite.Interpreter(model_path="tomato_model.tflite")
+        # Una, subukang i-load gamit ang standalone light tflite-runtime (Tamang-tama sa cloud hosting)
+        import tflite_runtime.interpreter as tflite
+        interpreter = tflite.Interpreter(model_path=model_path)
+        interpreter.allocate_tensors()
+        return interpreter
+    except ImportError:
+        try:
+            # Fallback kapag full heavy TensorFlow engine ang nakainstall local
+            import tensorflow as tf
+            interpreter = tf.lite.Interpreter(model_path=model_path)
             interpreter.allocate_tensors()
             return interpreter
-        else:
-            st.error("tomato_model.tflite file not found in repository!")
+        except Exception as e:
+            st.error(f"Error loading TFLite model: {e}")
             return None
-    except Exception as e:
-        st.error(f"Error loading TFLite model: {e}")
-        return None
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -161,7 +166,12 @@ def convert_predictions_to_excel(predictions):
 # -------------------------------------------------
 def _get_model_input_size(model, fallback=(224, 224)):
     try:
-        if hasattr(model, "inputs") and model.inputs:
+        if hasattr(model, "get_input_details"):
+            # Para sa TFLite Interpreter
+            ishape = model.get_input_details()[0]['shape']
+            return (int(ishape[1]), int(ishape[2]))
+        elif hasattr(model, "inputs") and model.inputs:
+            # Para sa Native Keras model instance
             ishape = model.inputs[0].shape
             h, w = int(ishape[1]), int(ishape[2])
             if h and w: return (h, w)
@@ -199,10 +209,16 @@ def run_prediction(pil_image):
         fuzzy_score = 0
 
     result = make_results(avg_preds, idx, conf, class_indices_path="class_indices.json")
+    
+    # Siguraduhin na numeric float ang 'prediction' value na nakuha mula sa utils
+    raw_prediction_value = result.get("prediction", conf)
+    if isinstance(raw_prediction_value, str) and "%" in raw_prediction_value:
+        raw_prediction_value = float(raw_prediction_value.replace("%", "")) / 100.0
+
     result.update({
         "variety_label": detected_variety,
-        "prediction": float(conf),
-        "prediction_display": f"{int(conf * 100)}%",
+        "prediction": float(raw_prediction_value),
+        "prediction_display": f"{int(float(raw_prediction_value) * 100)}%",
         "hsv_percent": float(hsv_percent),
         "lab_score": float(lab_score),
         "fuzzy_ripeness": float(fuzzy_score),
@@ -432,18 +448,12 @@ if res_variety and supabase and res_variety.get("variety_label") != "Unknown":
     rec_data = res_variety.get("recommendation")
     
     if rec_data is not None and str(rec_data).strip().lower() not in ["none", "", "null"]:
-        # Establish a tracking finger print using values to see if we already committed this run
         current_fingerprint = f"{res_variety.get('variety_label')}_{res_variety.get('prediction')}_{res_variety.get('fuzzy_ripeness')}"
         
         if st.session_state.last_processed_uid != current_fingerprint:
             try:
-                raw_pred = res_variety.get("prediction", 0)
-                if isinstance(raw_pred, str) and "%" in raw_pred:
-                    clean_pred = float(raw_pred.replace("%", "")) / 100.0
-                    display_pred = raw_pred
-                else:
-                    clean_pred = float(raw_pred)
-                    display_pred = f"{int(clean_pred * 100)}%"
+                clean_pred = float(res_variety.get("prediction", 0))
+                display_pred = res_variety.get("prediction_display", f"{int(clean_pred * 100)}%")
 
                 payload = {
                     "id": str(uuid.uuid4()), 
@@ -459,7 +469,6 @@ if res_variety and supabase and res_variety.get("variety_label") != "Unknown":
                 }
 
                 supabase.table("tomato_logs").insert(payload).execute()
-                # Update fingerprint status to block sequential duplicate loop saves
                 st.session_state.last_processed_uid = current_fingerprint
                 st.toast("📊 Record logged to Supabase successfully!", icon="💾")
                 
