@@ -11,3 +11,4 @@ openpyxl
 scipy
 networkx
 tflite-runtime==2.14.0
+matplotlib
